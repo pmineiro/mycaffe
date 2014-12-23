@@ -1,0 +1,7 @@
+*.caffemodel
+*.solverstate
+*.prototxt
+mnist_train_*
+t*.dat
+testpreds?
+lenet?

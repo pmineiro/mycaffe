@@ -121,8 +121,8 @@ void PyNet::set_input_arrays(bp::object data_obj, bp::object labels_obj) {
   input_data_ = data_obj;
   input_labels_ = labels_obj;
 
-  md_layer->Reset(static_cast<float*>(PyArray_DATA(data_arr)),
-      static_cast<float*>(PyArray_DATA(labels_arr)),
+  md_layer->Reset((float*)(PyArray_DATA(data_arr)),
+      (float*) (PyArray_DATA(labels_arr)),
       PyArray_DIMS(data_arr)[0]);
 }
 

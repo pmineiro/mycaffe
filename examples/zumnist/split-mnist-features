@@ -1,0 +1,53 @@
+#! /usr/bin/env perl
+
+use warnings;
+use strict;
+use POSIX qw (ceil);
+
+srand 69;
+
+local $SIG{__WARN__} = sub {};
+
+my $what = shift @ARGV or die;
+my $num = shift @ARGV or die;
+
+my $fh = \*STDIN;
+binmode ($fh, ':raw');
+
+$/ = \4;
+my $magic = unpack ("N", <$fh>);
+die "wtf $magic" unless $magic == 2051;
+
+my $n_images = unpack ("N", <$fh>);
+warn "n_images = $n_images";
+
+my $n_rows = unpack ("N", <$fh>);
+warn "n_rows = $n_rows";
+
+my $n_columns = unpack ("N", <$fh>);
+warn "n_columns = $n_columns";
+
+my $rc = $n_rows * $n_columns;
+
+$/ = \$rc;
+
+my @lines = map { $_->[0] } 
+            sort { $a->[1] <=> $b->[1] } 
+	    map { [ $_, rand () ] } 
+	    <$fh>;
+
+my $split = ceil ($n_images / $num);
+my $start = ($what - 1) * $split;
+
+my @data = splice (@lines, $start, $split);
+
+binmode (\*STDOUT,':raw');
+print pack ("N", $magic);
+print pack ("N", scalar @data);
+print pack ("N", $n_rows);
+print pack ("N", $n_columns);
+
+foreach my $d (@data)
+  {
+    print $d;
+  }

@@ -1,0 +1,17 @@
+#! /usr/bin/env python
+
+import caffe
+import numpy
+import sys
+
+# 'lenet_train_test1.prototxt','lenet1_iter_10000.caffemodel'
+
+net = caffe.Net(sys.argv[1], sys.argv[2])
+net.set_mode_cpu()
+net.set_phase_test()
+for ii in range(0,100):
+  out=net.forward();
+  z=out['prob']
+  z.shape=(z.shape[0],z.shape[1])
+  numpy.savetxt(sys.stdout, z, fmt='%.4f')
+  sys.stderr.write("*")
