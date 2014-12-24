@@ -4,7 +4,7 @@
 numnets=6
 nets=$(shell seq 1 $(numnets))
 
-all: mergedpreds.hdf5
+all: compiledlenet
 	
 #	$(patsubst %,testpreds%,$(nets))
 
@@ -43,3 +43,4 @@ mergedpreds.hdf5: merge_testpreds.py $(patsubst %,testpreds%,$(nets))
 
 compiledlenet: mergedpreds.hdf5
 	../../build/tools/caffe train --solver=lenet_compileensemble_solver
+	touch $@

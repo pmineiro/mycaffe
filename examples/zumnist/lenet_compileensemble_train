@@ -6,7 +6,7 @@ layers {
   top: "label"
   hdf5_data_param {
     source: "mergedpreds.txt"
-    batch_size: 1000
+    batch_size: 2000
   }
   include: { phase: TRAIN }
 }
@@ -16,7 +16,7 @@ layers {
   top: "data"
   top: "label"
   data_param {
-    source: "/home/pmineiro/src/caffe/examples/zumnist/../../examples/mnist/mnist_test_lmdb"
+    source: "../mnist/mnist_test_lmdb"
     backend: LMDB
     batch_size: 100
   }
