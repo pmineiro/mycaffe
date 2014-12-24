@@ -6,7 +6,7 @@ layers {
   top: "label"
   hdf5_data_param {
     source: "mergedpreds.txt"
-    batch_size: 2000
+    batch_size: 1000
   }
   include: { phase: TRAIN }
 }
