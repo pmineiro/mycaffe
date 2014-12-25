@@ -127,7 +127,8 @@ layers {
 }
 layers {
   name: "loss"
-  type: EUCLIDEAN_LOSS
+#  type: EUCLIDEAN_LOSS
+  type: SIGMOID_CROSS_ENTROPY_LOSS
   bottom: "ip2"
   bottom: "label"
   top: "loss" 
