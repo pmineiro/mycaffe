@@ -41,6 +41,6 @@ testpreds%: lenet%
 mergedpreds.hdf5: merge_testpreds.py $(patsubst %,testpreds%,$(nets)) 
 	paste $(wordlist 2,1000,$^) | python ./merge_testpreds.py $@
 
-compiledlenet: mergedpreds.hdf5
+compiledlenet: mergedpreds.hdf5 lenet_compileensemble_solver lenet_compileensemble_train
 	../../build/tools/caffe train --solver=lenet_compileensemble_solver
 	touch $@
