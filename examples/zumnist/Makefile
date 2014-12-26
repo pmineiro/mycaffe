@@ -36,7 +36,7 @@ lenet%: lenet_solver%.prototxt lenet_train_test%.prototxt mnist_train_%
 	touch $@
 
 testpreds%: lenet%
-	PYTHONPATH=`pwd`/../../python ./output-preds lenet_trainpreds lenet$*_iter_5000.caffemodel > $@
+	PYTHONPATH=`pwd`/../../python ./output-preds lenet_trainpreds lenet$*_iter_10000.caffemodel > $@
 
 mergedpreds.hdf5: merge_testpreds.py $(patsubst %,testpreds%,$(nets)) 
 	paste $(wordlist 2,1000,$^) | python ./merge_testpreds.py $@
