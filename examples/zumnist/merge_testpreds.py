@@ -15,7 +15,6 @@ n_rows_s = mnist.read(4)
 n_columns_s = mnist.read(4)
 
 n=0
-
 for chunk in iter(lambda: mnist.read(28*28), ''):
   data[n] = np.array([float(ord(c)) for c in list(chunk)]).reshape(1,28,28)
   n=n+1
@@ -23,11 +22,13 @@ for chunk in iter(lambda: mnist.read(28*28), ''):
 labels = f.create_dataset("label", (60000,10), dtype='f')
 
 n=0
+epsilon=1e-6
 for line in sys.stdin:
-  values = [float(digit) for digit in line.split()]
+  values = [epsilon+(1-epsilon)*float(digit) for digit in line.split()]
   valuesreshape=np.array(values).reshape(-1,10)
   nummodels=valuesreshape.shape[0]
-  valuesarray = np.sum(valuesreshape,axis=0)/nummodels
+  valuesarray = np.exp(np.sum(np.log(valuesreshape),axis=0)/nummodels)
+  valuesarray = valuesarray / valuesarray.sum()
   labels[n]=valuesarray
   n=n+1
 
