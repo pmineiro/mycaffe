@@ -7,7 +7,7 @@ import sys
 # 'lenet_train_test1.prototxt','lenet1_iter_10000.caffemodel'
 
 net = caffe.Net(sys.argv[1], sys.argv[2])
-net.set_mode_cpu()
+net.set_mode_gpu()
 net.set_phase_test()
 for ii in range(0,100):	# NB: solver file says batch size of 600
   out=net.forward();

@@ -13,7 +13,7 @@ all: compiledlenet
 clean:
 	rm -f $(wildcard *.prototxt) $(wildcard t*.dat) \
 	      $(wildcard *.caffemodel) $(wildcard *.solverstate) \
-	      $(wildcard lenet?)
+	      $(wildcard lenet?) $(wildcard testpreds*)
 	rm -rf $(wildcard mnist_train_*)
 
 lenet_solver%.prototxt: make_lenet_solver
