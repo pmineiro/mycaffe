@@ -11,9 +11,10 @@ all: compiledlenet
 #	$(patsubst %,lenet_solver%.prototxt,$(nets)) $(patsubst %,lenet_train_test%.prototxt,$(nets)) $(patsubst %,mnist_train_%,$(nets))
 
 clean:
-	rm -f $(wildcard *.prototxt) $(wildcard t*.dat) \
-	      $(wildcard *.caffemodel) $(wildcard *.solverstate) \
-	      $(wildcard lenet?)
+	rm -f $(wildcard *.prototxt) $(wildcard t*.dat) 		\
+	      $(wildcard *.caffemodel) $(wildcard *.solverstate) 	\
+	      $(wildcard lenet?) $(wildcard testpreds*) 		\
+	      $(wildcard compiledlenet)
 	rm -rf $(wildcard mnist_train_*)
 
 lenet_solver%.prototxt: make_lenet_solver
@@ -36,7 +37,7 @@ lenet%: lenet_solver%.prototxt lenet_train_test%.prototxt mnist_train_%
 	touch $@
 
 testpreds%: lenet%
-	PYTHONPATH=`pwd`/../../python ./output-preds lenet_trainpreds lenet$*_iter_5000.caffemodel > $@
+	PYTHONPATH=`pwd`/../../python ./output-preds lenet_trainpreds lenet$*_iter_10000.caffemodel > $@
 
 mergedpreds.hdf5: merge_testpreds.py $(patsubst %,testpreds%,$(nets)) 
 	paste $(wordlist 2,1000,$^) | python ./merge_testpreds.py $@
