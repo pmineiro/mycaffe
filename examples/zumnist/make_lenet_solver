@@ -7,6 +7,8 @@ my $what = shift @ARGV or die;
 my $where = `pwd`;
 chomp $where;
 
+my $seed = 4545 + $what;
+
 print <<"EOD";
 # The train/test net protocol buffer definition
 net: "$where/lenet_train_test$what.prototxt"
@@ -19,7 +21,7 @@ test_interval: 1000
 # The base learning rate, momentum and the weight decay of the network.
 base_lr: 0.02
 momentum: 0.9
-weight_decay: 1e-6
+weight_decay: 1e-7
 # The learning rate policy
 lr_policy: "inv"
 gamma: 0.0001
@@ -33,4 +35,5 @@ max_iter: 10000
 snapshot_prefix: "$where/lenet$what"
 # solver mode: CPU or GPU
 solver_mode: GPU
+random_seed: $seed
 EOD

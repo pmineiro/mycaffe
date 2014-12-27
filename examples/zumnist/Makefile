@@ -11,9 +11,10 @@ all: compiledlenet
 #	$(patsubst %,lenet_solver%.prototxt,$(nets)) $(patsubst %,lenet_train_test%.prototxt,$(nets)) $(patsubst %,mnist_train_%,$(nets))
 
 clean:
-	rm -f $(wildcard *.prototxt) $(wildcard t*.dat) \
-	      $(wildcard *.caffemodel) $(wildcard *.solverstate) \
-	      $(wildcard lenet?) $(wildcard testpreds*)
+	rm -f $(wildcard *.prototxt) $(wildcard t*.dat) 		\
+	      $(wildcard *.caffemodel) $(wildcard *.solverstate) 	\
+	      $(wildcard lenet?) $(wildcard testpreds*)			\
+	      $(wildcard mergedpreds.hdf5) $(wildcard compiledlenet)
 	rm -rf $(wildcard mnist_train_*)
 
 lenet_solver%.prototxt: make_lenet_solver

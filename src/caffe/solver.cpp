@@ -33,6 +33,7 @@ void Solver<Dtype>::Init(const SolverParameter& param) {
             << param.DebugString();
   param_ = param;
   if (param_.random_seed() >= 0) {
+    LOG(INFO) << "Setting random seed to: " << param_.random_seed() << std::endl;
     Caffe::set_random_seed(param_.random_seed());
   }
   // Scaffolding code
