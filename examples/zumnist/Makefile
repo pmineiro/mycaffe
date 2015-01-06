@@ -67,7 +67,7 @@ generated3/lenet_solver%.prototxt: make_lenet_solver
 	./make_lenet_solver $* 3 > $@
 
 generated3/lenet%: generated3/lenet_solver%.prototxt generated/lenet_train_test%.prototxt mnist_train_% compiledlenet2
-	../../build/tools/caffe train --solver=$< --weights=lenetcompile2_iter_10000.caffemodel
+	../../build/tools/caffe train --solver=$< --weights=lenetcompile2_iter_20000.caffemodel
 	touch $@
 
 generated3/testpreds%: generated3/lenet%
@@ -78,4 +78,21 @@ generated3/mergedpreds.hdf5: merge_testpreds.py $(patsubst %,generated3/testpred
 
 compiledlenet3: generated3/mergedpreds.hdf5 lenet_compileensemble_solver3 lenet_compileensemble_train3
 	../../build/tools/caffe train --solver=lenet_compileensemble_solver3
+	touch $@
+
+generated4/lenet_solver%.prototxt: make_lenet_solver
+	./make_lenet_solver $* 4 > $@
+
+generated4/lenet%: generated4/lenet_solver%.prototxt generated/lenet_train_test%.prototxt mnist_train_% compiledlenet2
+	../../build/tools/caffe train --solver=$< --weights=lenetcompile3_iter_40000.caffemodel
+	touch $@
+
+generated4/testpreds%: generated4/lenet%
+	PYTHONPATH=`pwd`/../../python ./output-preds lenet_trainpreds generated4/lenet$*_iter_10000.caffemodel > $@
+
+generated4/mergedpreds.hdf5: merge_testpreds.py $(patsubst %,generated4/testpreds%,$(nets)) 
+	paste $(wordlist 2,1000,$^) | python ./merge_testpreds.py $(numnets) $@
+
+compiledlenet4: generated4/mergedpreds.hdf5 lenet_compileensemble_solver4 lenet_compileensemble_train4
+	../../build/tools/caffe train --solver=lenet_compileensemble_solver4
 	touch $@
