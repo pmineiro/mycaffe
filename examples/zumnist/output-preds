@@ -11,7 +11,7 @@ net.set_mode_gpu()
 net.set_phase_test()
 for ii in range(0,100):	# NB: solver file says batch size of 600
   out=net.forward();
-  z=out['prob']
+  z=out['prediction']
   z.shape=(z.shape[0],z.shape[1])
   numpy.savetxt(sys.stdout, z, fmt='%.4f')
   sys.stderr.write("*")

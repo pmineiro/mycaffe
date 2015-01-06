@@ -4,44 +4,61 @@
 numnets=6
 nets=$(shell seq 1 $(numnets))
 
-all: compiledlenet
+all: compiledlenet2
 	
 #	$(patsubst %,testpreds%,$(nets))
 
 #	$(patsubst %,lenet_solver%.prototxt,$(nets)) $(patsubst %,lenet_train_test%.prototxt,$(nets)) $(patsubst %,mnist_train_%,$(nets))
 
 clean:
-	rm -f $(wildcard *.prototxt) $(wildcard t*.dat) 		\
-	      $(wildcard *.caffemodel) $(wildcard *.solverstate) 	\
-	      $(wildcard lenet?) $(wildcard testpreds*)			\
-	      $(wildcard mergedpreds.hdf5) $(wildcard compiledlenet)
+	rm -f $(wildcard generated*/*.prototxt) $(wildcard generated*/t*.dat) \
+	      $(wildcard generated*/*.caffemodel) $(wildcard generated*/*.solverstate) 	\
+	      $(wildcard generated*/lenet?) $(wildcard generated*/testpreds*) \
+	      $(wildcard generated*/mergedpreds.hdf5) $(wildcard compiledlenet*)
 	rm -rf $(wildcard mnist_train_*)
 
-lenet_solver%.prototxt: make_lenet_solver
+generated/lenet_solver%.prototxt: make_lenet_solver
 	./make_lenet_solver $* > $@
 
-lenet_train_test%.prototxt: make_lenet_train_test
+generated/lenet_train_test%.prototxt: make_lenet_train_test
 	./make_lenet_train_test $* > $@
 
-train-images-idx3-ubyte.%.dat: ../../data/mnist/train-images-idx3-ubyte ./split-mnist-features
+generated/train-images-idx3-ubyte.%.dat: ../../data/mnist/train-images-idx3-ubyte ./split-mnist-features
 	cat $< | ./split-mnist-features $* $(numnets) > $@
 
-train-labels-idx1-ubyte.%.dat: ../../data/mnist/train-labels-idx1-ubyte ./split-mnist-labels
+generated/train-labels-idx1-ubyte.%.dat: ../../data/mnist/train-labels-idx1-ubyte ./split-mnist-labels
 	cat $< | ./split-mnist-labels $* $(numnets) > $@
 
-mnist_train_%: train-images-idx3-ubyte.%.dat train-labels-idx1-ubyte.%.dat
+mnist_train_%: generated/train-images-idx3-ubyte.%.dat generated/train-labels-idx1-ubyte.%.dat
 	../../build/examples/mnist/convert_mnist_data.bin --v=0 --logtostderr $^ $@ --backend=lmdb
 
-lenet%: lenet_solver%.prototxt lenet_train_test%.prototxt mnist_train_%
+generated/lenet%: generated/lenet_solver%.prototxt generated/lenet_train_test%.prototxt mnist_train_%
 	../../build/tools/caffe train --solver=$<
 	touch $@
 
-testpreds%: lenet%
-	PYTHONPATH=`pwd`/../../python ./output-preds lenet_trainpreds lenet$*_iter_10000.caffemodel > $@
+generated/testpreds%: generated/lenet%
+	PYTHONPATH=`pwd`/../../python ./output-preds lenet_trainpreds generated/lenet$*_iter_10000.caffemodel > $@
 
-mergedpreds.hdf5: merge_testpreds.py $(patsubst %,testpreds%,$(nets)) 
-	paste $(wordlist 2,1000,$^) | python ./merge_testpreds.py $@
+generated/mergedpreds.hdf5: merge_testpreds.py $(patsubst %,generated/testpreds%,$(nets)) 
+	paste $(wordlist 2,1000,$^) | python ./merge_testpreds.py $(numnets) $@
 
-compiledlenet: mergedpreds.hdf5 lenet_compileensemble_solver lenet_compileensemble_train
+compiledlenet: generated/mergedpreds.hdf5 lenet_compileensemble_solver lenet_compileensemble_train
 	../../build/tools/caffe train --solver=lenet_compileensemble_solver
+	touch $@
+
+generated2/lenet_solver%.prototxt: make_lenet_solver
+	./make_lenet_solver $* 2 > $@
+
+generated2/lenet%: generated2/lenet_solver%.prototxt generated/lenet_train_test%.prototxt mnist_train_% compiledlenet
+	../../build/tools/caffe train --solver=$< --weights=lenetcompile_iter_10000.caffemodel
+	touch $@
+
+generated2/testpreds%: generated2/lenet%
+	PYTHONPATH=`pwd`/../../python ./output-preds lenet_trainpreds generated2/lenet$*_iter_10000.caffemodel > $@
+
+generated2/mergedpreds.hdf5: merge_testpreds.py $(patsubst %,generated2/testpreds%,$(nets)) 
+	paste $(wordlist 2,1000,$^) | python ./merge_testpreds.py $(numnets) $@
+
+compiledlenet2: generated2/mergedpreds.hdf5 lenet_compileensemble_solver2 lenet_compileensemble_train2
+	../../build/tools/caffe train --solver=lenet_compileensemble_solver2
 	touch $@

@@ -1,20 +1,5 @@
-#! /usr/bin/env perl
-
-use warnings;
-use strict;
-
-my $what = shift @ARGV or die;
-
-my $pass = @ARGV ? shift @ARGV : 1;
-my $lr = 0.02 * (10 ** (1-$pass));
-my $decay = ($pass == 1) ? 1e-7 : 0.0;
-my $path = ($pass == 1) ? "generated" : "generated$pass";
-
-my $seed = 4545 + $what;
-
-print <<"EOD";
 # The train/test net protocol buffer definition
-net: "./generated/lenet_train_test$what.prototxt"
+net: "lenet_compileensemble_train2"
 # test_iter specifies how many forward passes the test should carry out.
 # In the case of MNIST, we have test batch size 100 and 100 test iterations,
 # covering the full 10,000 testing images.
@@ -22,9 +7,9 @@ test_iter: 100
 # Carry out testing every 500 training iterations.
 test_interval: 1000
 # The base learning rate, momentum and the weight decay of the network.
-base_lr: $lr
+base_lr: 2e-3
 momentum: 0.9
-weight_decay: $decay
+weight_decay: 1e-5
 # The learning rate policy
 lr_policy: "inv"
 gamma: 0.0001
@@ -35,8 +20,7 @@ display: 100
 max_iter: 10000
 # snapshot intermediate results
 #snapshot: 5000
-snapshot_prefix: "./$path/lenet$what"
+snapshot_prefix: "lenetcompile2"
 # solver mode: CPU or GPU
 solver_mode: GPU
-random_seed: $seed
-EOD
+random_seed: 4545

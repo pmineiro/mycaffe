@@ -4,8 +4,6 @@ use warnings;
 use strict;
 
 my $what = shift @ARGV or die;
-my $where = `pwd`;
-chomp $where;
 
 print <<"EOD";
 name: "LeNet"
@@ -15,7 +13,7 @@ layers {
   top: "data"
   top: "label"
   data_param {
-    source: "$where/mnist_train_$what"
+    source: "./mnist_train_$what"
     backend: LMDB
     batch_size: 64
   }
@@ -30,7 +28,7 @@ layers {
   top: "data"
   top: "label"
   data_param {
-    source: "$where/../../examples/mnist/mnist_test_lmdb"
+    source: "../../examples/mnist/mnist_test_lmdb"
     backend: LMDB
     batch_size: 100
   }
