@@ -62,3 +62,20 @@ generated2/mergedpreds.hdf5: merge_testpreds.py $(patsubst %,generated2/testpred
 compiledlenet2: generated2/mergedpreds.hdf5 lenet_compileensemble_solver2 lenet_compileensemble_train2
 	../../build/tools/caffe train --solver=lenet_compileensemble_solver2
 	touch $@
+
+generated3/lenet_solver%.prototxt: make_lenet_solver
+	./make_lenet_solver $* 3 > $@
+
+generated3/lenet%: generated3/lenet_solver%.prototxt generated/lenet_train_test%.prototxt mnist_train_% compiledlenet2
+	../../build/tools/caffe train --solver=$< --weights=lenetcompile2_iter_10000.caffemodel
+	touch $@
+
+generated3/testpreds%: generated3/lenet%
+	PYTHONPATH=`pwd`/../../python ./output-preds lenet_trainpreds generated3/lenet$*_iter_10000.caffemodel > $@
+
+generated3/mergedpreds.hdf5: merge_testpreds.py $(patsubst %,generated3/testpreds%,$(nets)) 
+	paste $(wordlist 2,1000,$^) | python ./merge_testpreds.py $(numnets) $@
+
+compiledlenet3: generated3/mergedpreds.hdf5 lenet_compileensemble_solver3 lenet_compileensemble_train3
+	../../build/tools/caffe train --solver=lenet_compileensemble_solver3
+	touch $@
