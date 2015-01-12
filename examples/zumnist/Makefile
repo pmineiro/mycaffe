@@ -4,7 +4,7 @@
 numnets=6
 nets=$(shell seq 1 $(numnets))
 
-all: compiledlenet2
+all: compiledlenet3
 	
 #	$(patsubst %,testpreds%,$(nets))
 

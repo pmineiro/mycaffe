@@ -1,0 +1,37 @@
+#! /usr/bin/env perl
+
+use warnings;
+use strict;
+use POSIX qw (ceil);
+
+srand 69;
+
+local $SIG{__WARN__} = sub {};
+
+my $what = shift @ARGV or die;
+my $num = shift @ARGV or die;
+
+my $fh = \*STDIN;
+binmode ($fh, ':raw');
+
+# cifar has no header
+
+$/ = \3073;
+
+my @lines = map { $_->[0] } 
+            sort { $a->[1] <=> $b->[1] } 
+	    map { [ $_, rand () ] } 
+	    <$fh>;
+
+my $n_images = scalar @lines;
+my $split = ceil ($n_images / $num);
+my $start = ($what - 1) * $split;
+
+my @data = splice (@lines, $start, $split);
+
+binmode (\*STDOUT,':raw');
+
+foreach my $d (@data)
+  {
+    print $d;
+  }
