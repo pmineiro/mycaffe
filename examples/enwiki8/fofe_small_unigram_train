@@ -1,25 +1,16 @@
 name: "Fofe"
 layers {
   name: "input"
-  type: HDF5_DATA
+  type: MEMORY_DATA
   top: "data"
   top: "label"
-  hdf5_data_param {
-    source: "fofe.train.txt"
-    batch_size: 100
+  memory_data_param {
+    batch_size: 200
+    channels: 1
+    height: 1
+    width: 80002
   }
-  include: { phase: TRAIN }
-}
-layers {
-  name: "input"
-  type: HDF5_DATA
-  top: "data"
-  top: "label"
-  hdf5_data_param {
-    source: "fofe.test.txt"
-    batch_size: 100
-  }
-  include: { phase: TEST }
+# include: { phase: TRAIN }
 }
 layers {
   name: "proj1"
@@ -92,7 +83,7 @@ layers {
   blobs_lr: 1
   blobs_lr: 2
   inner_product_param {
-    num_output: 80000
+    num_output: 80001
     weight_filler {
       type: "xavier"
     }
@@ -107,7 +98,6 @@ layers {
   bottom: "ip3"
   bottom: "label"
   top: "accuracy" 
-#  include: { phase: TEST }
 }
 layers {
   name: "loss"

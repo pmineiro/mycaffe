@@ -4,7 +4,6 @@ use warnings;
 use strict;
 
 use IO::File;
-use IO::Handle;
 
 my $vocabsize = shift @ARGV or die;
 my $windowsize = shift @ARGV or die;
@@ -41,12 +40,12 @@ while (defined ($_ = <>))
       {
         my $offset = 0;
 
-        print "$enc[$pos+$windowsize]\t";
+        print "$enc[$pos+$windowsize]";
 
         foreach my $relpos (1 .. ($windowsize-1))
           {
-            my $k = $offset + $enc[$pos+$windowsize-$relpos];
-            print "$k:1 ";
+            my $val = $offset + $enc[$pos+$windowsize-$relpos];
+            print " $val:1\n";
             $offset += $vocabsize + 2;
           }
 
@@ -59,7 +58,7 @@ while (defined ($_ = <>))
             $k += $offset;
             my $vbuf = sprintf "%3.3f", $v;
             $vbuf =~ s/\.?0*$//;
-            print "$k:$vbuf ";
+            print " $k:$vbuf";
           }
 
         print "\n";
