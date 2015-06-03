@@ -1,38 +1,21 @@
 name: "Fofe"
+force_backward: true
 layers {
   name: "input"
   type: MEMORY_DATA
   top: "data"
   top: "label"
   memory_data_param {
-    batch_size: 500
+    batch_size: 250
     channels: 1
     height: 1
-    width: 80002
-  }
-# include: { phase: TRAIN }
-}
-layers {
-  name: "proj1"
-  type: INNER_PRODUCT
-  bottom: "data"
-  top: "proj1"
-  blobs_lr: 1
-  blobs_lr: 2
-  inner_product_param {
-    num_output: 200
-    weight_filler {
-      type: "xavier"
-    }
-    bias_filler {
-      type: "constant"
-    }
+    width: 200  
   }
 }
 layers {
   name: "ip1"
   type: INNER_PRODUCT
-  bottom: "proj1"
+  bottom: "data"
   top: "ip1"
   blobs_lr: 1
   blobs_lr: 2
@@ -92,14 +75,6 @@ layers {
     }
   }
 }
-## NB: slightly faster if commented out
-#layers {
-#  name: "accuracy"
-#  type: ACCURACY
-#  bottom: "ip3"
-#  bottom: "label"
-#  top: "accuracy" 
-#}
 layers {
   name: "loss"
   type: SOFTMAX_LOSS

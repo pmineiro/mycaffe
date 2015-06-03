@@ -22,4 +22,7 @@ fofengram.txt: enwik8.zip wikifil.pl histo8 makefofengram.pl
 	zcat $(word 1,$^) | perl $(word 2,$^) | perl $(word 4,$^) $(numvocab) $(windowsize) $(alpha) $(cutoff) $(word 3,$^) | perl -ne 'BEGIN { srand 69; }; print rand(),"\t",$$_;' | sort -S50% -k1,1n | cut -f2- > $@
 
 fofemodel: fofe_small_unigram_train fofengram.txt
-	PYTHONPATH=../../python python makefofemodel.py $^
+	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofemodel.py $^
+
+fofesparsemodel: fofe_sparse_small_unigram_train fofengram.txt
+	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py $^
