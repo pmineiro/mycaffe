@@ -11,7 +11,8 @@ import pprint
 
 alpha=0.9
 eta=1.0
-decay=0.99999
+etadecay=0.999999
+weightdecay=1e-4
 
 #np.seterr(divide='raise',over='raise',invalid='raise')
 
@@ -20,7 +21,7 @@ np.random.seed(8675309)
 vocabsize=80000
 windowsize=2
 rawembeddingsize=200
-batchsize=500 
+batchsize=1500 
 
 embeddingsize=windowsize*rawembeddingsize
 invocabsize=windowsize*(vocabsize+2)
@@ -59,8 +60,8 @@ sumloss=0
 sumsinceloss=0
 nextprint=1
 
-print "%11s\t%11s\t%11s\t%11s\t%11s"%("delta t","average","since","example","learning")
-print "%11s\t%11s\t%11s\t%11s\t%11s"%("","loss","last","counter","rate")
+print "%10s\t%10s\t%10s\t%11s\t%11s"%("delta t","average","since","example","learning")
+print "%10s\t%10s\t%10s\t%11s\t%11s"%("","loss","last","counter","rate")
 
 for ii in range(10):
   f.seek(0,0)
@@ -98,13 +99,15 @@ for ii in range(10):
 
           momembeddiff=alpha*momembeddiff+eta*sdtransdiff;
           embedding=embedding-momembeddiff
+          embedding=(1-weightdecay*eta)*embedding
 
           for (layer,momlayer) in zip(net.layers,momnet.layers):
             for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
               momblob.data[:]=alpha*momblob.data[:]+eta*blob.diff
               blob.data[:]-=momblob.data[:]
+              blob.data[:]=(1-weightdecay*eta)*blob.data[:]
 
-          eta=eta*decay
+          eta=eta*etadecay
           value=[]
           row=[]
           col=[]
@@ -114,29 +117,26 @@ for ii in range(10):
           numsinceupdates=numsinceupdates+1
           if numupdates >= nextprint:
               now=time.time()
-              print "%11.4f\t%11.4f\t%11.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
+              print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
               nextprint=2*nextprint
               numsinceupdates=0
               sumsinceloss=0
 
 
 now=time.time()
-print "%11.4f\t%11.4f\t%11.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
+print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
 
 # GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py fofe_sparse_small_unigram_train fofengram9.txt
-#     delta t         average           since         example        learning
-#                        loss            last         counter            rate
-#      1.6929         11.2890         11.2890             500         0.99999
-#      3.2951         11.2838         11.2785            1000         0.99998
-#      6.6013         11.2608         11.2378            2000         0.99996
-#     12.5881         11.1838         11.1069            4000         0.99992
-#     24.5639         10.7855         10.3871            8000         0.99984
-#     48.5842         10.2060          9.6265           16000         0.99968
-#     97.5400          9.2462          8.2864           32000         0.99936
-#    193.0246          8.3263          7.4064           64000        0.998721
-#    380.8657          7.6254          6.9246          128000        0.997443
-#    755.9040          7.0354          6.4454          256000        0.994893
-#   2035.8756          6.5855          6.1355          512000        0.989812
-#   5894.3285          6.2698          5.9542         1024000        0.979728
-#  14606.9051          6.0277          5.7855         2048000        0.959867
-#  34047.6248          5.8322          5.6367         4096000        0.921345
+#    delta t         average           since          example        learning
+#                       loss            last          counter            rate
+#      2.596         11.2893         11.2893             1500        0.999999
+#      4.967         11.2832         11.2772             3000        0.999998
+#      9.668         11.2622         11.2412             6000        0.999996
+#     19.587         11.1822         11.1022            12000        0.999992
+#     38.828         10.7662         10.3502            24000        0.999984
+#     77.922         10.0589          9.3516            48000        0.999968
+#    154.365          9.1684          8.2779            96000        0.999936
+#    302.038          8.2353          7.3023           192000        0.999872
+#    597.835          7.5238          6.8124           384000        0.999744
+#   1191.957          6.9111          6.2984           768000        0.999488
+#   2917.859          6.4206          5.9301          1536000        0.998977
