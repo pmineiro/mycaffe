@@ -45,7 +45,7 @@ while (defined ($_ = <>))
         foreach my $relpos (1 .. ($windowsize-1))
           {
             my $val = $offset + $enc[$pos+$windowsize-$relpos];
-            print " $val:1\n";
+            print " $val:1";
             $offset += $vocabsize + 2;
           }
 

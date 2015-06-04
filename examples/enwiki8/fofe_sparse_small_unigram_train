@@ -9,7 +9,7 @@ layers {
     batch_size: 500
     channels: 1
     height: 1
-    width: 200  
+    width: 400  
   }
 }
 layers {
