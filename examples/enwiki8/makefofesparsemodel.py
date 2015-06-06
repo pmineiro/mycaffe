@@ -18,10 +18,10 @@ weightdecay=1e-4
 
 lrs=dict()
 lrs['embedding']=0.75
-lrs[('ip1',0)]=0.75
-lrs[('ip1',1)]=1
-lrs[('ip2',0)]=0.75
-lrs[('ip2',1)]=1
+lrs[('ip1',0)]=1
+lrs[('ip1',1)]=1.5
+lrs[('ip2',0)]=1
+lrs[('ip2',1)]=1.5
 lrs[('ip3',0)]=0.75
 lrs[('ip3',1)]=1
 
