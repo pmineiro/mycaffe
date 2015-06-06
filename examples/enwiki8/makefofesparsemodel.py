@@ -11,8 +11,19 @@ import pprint
 
 alpha=0.9
 eta=1.0
-etadecay=0.999999
+etadecay=0.999995
 weightdecay=1e-4
+
+# UGH ... so much for DRY
+
+lrs=dict()
+lrs['embedding']=0.75
+lrs[('ip1',0)]=0.75
+lrs[('ip1',1)]=1
+lrs[('ip2',0)]=0.75
+lrs[('ip2',1)]=1
+lrs[('ip3',0)]=0.75
+lrs[('ip3',1)]=1
 
 #np.seterr(divide='raise',over='raise',invalid='raise')
 
@@ -97,15 +108,18 @@ for ii in range(10):
 
           sdtransdiff=sd.transpose().tocsr().dot(data_diff);
 
-          momembeddiff=alpha*momembeddiff+eta*sdtransdiff;
+          momembeddiff=alpha*momembeddiff+lrs['embedding']*eta*sdtransdiff;
           embedding=embedding-momembeddiff
-          embedding=(1-weightdecay*eta)*embedding
+          embedding=(1-lrs['embedding']*weightdecay*eta)*embedding
 
-          for (layer,momlayer) in zip(net.layers,momnet.layers):
+          for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
+            blobnum=0
             for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-              momblob.data[:]=alpha*momblob.data[:]+eta*blob.diff
+              myeta=lrs[(name,blobnum)]*eta
+              momblob.data[:]=alpha*momblob.data[:]+myeta*blob.diff
               blob.data[:]-=momblob.data[:]
-              blob.data[:]=(1-weightdecay*eta)*blob.data[:]
+              blob.data[:]=(1-weightdecay*myeta)*blob.data[:]
+              blobnum=blobnum+1
 
           eta=eta*etadecay
           value=[]
@@ -116,6 +130,7 @@ for ii in range(10):
           numupdates=numupdates+1
           numsinceupdates=numsinceupdates+1
           if numupdates >= nextprint:
+              net.save(sys.argv[3]+"."+str(numupdates))
               now=time.time()
               print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
               nextprint=2*nextprint
@@ -125,6 +140,7 @@ for ii in range(10):
 
 now=time.time()
 print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
+net.save(sys.argv[3])
 
 # GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py fofe_sparse_small_unigram_train fofengram9.txt
 #    delta t         average           since          example        learning
