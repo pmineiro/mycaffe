@@ -2,6 +2,7 @@
 
 import caffe
 import math
+import h5py
 import numpy as np
 import sys
 import time
@@ -9,7 +10,7 @@ from scipy.sparse import csr_matrix
 
 import pprint
 
-alpha=0.9
+alpha=0.95
 eta=1.0
 etadecay=0.999995
 weightdecay=1e-4
@@ -106,9 +107,9 @@ for ii in range(10):
           #          = df/dy_i x_j
           # df/dW    = (df/dy)*x'
 
-          sdtransdiff=sd.transpose().tocsr().dot(data_diff);
+          sdtransdiff=sd.transpose().tocsr().dot(data_diff)
 
-          momembeddiff=alpha*momembeddiff+lrs['embedding']*eta*sdtransdiff;
+          momembeddiff=alpha*momembeddiff+lrs['embedding']*eta*sdtransdiff
           embedding=embedding-momembeddiff
           embedding=(1-lrs['embedding']*weightdecay*eta)*embedding
 
@@ -131,6 +132,9 @@ for ii in range(10):
           numsinceupdates=numsinceupdates+1
           if numupdates >= nextprint:
               net.save(sys.argv[3]+"."+str(numupdates))
+              h5f=h5py.File(sys.argv[3]+"_e."+str(numupdates))
+              h5f.create_dataset('embedding',data=embedding)
+              h5f.close()
               now=time.time()
               print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
               nextprint=2*nextprint
@@ -141,6 +145,12 @@ for ii in range(10):
 now=time.time()
 print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
 net.save(sys.argv[3])
+h5f=h5py.File(sys.argv[3]+"_e")
+h5f.create_dataset('embedding',data=embedding)
+h5f.close()
+
+# import to matlab:
+# >> Z=h5read('fofesparsemodel9_e','/embedding');
 
 # GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py fofe_sparse_small_unigram_train fofengram9.txt
 #  delta t         average           since          example        learning
