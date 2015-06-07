@@ -25,5 +25,5 @@ fofemodel%: fofe_small_unigram_train fofengram%txt
 	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofemodel.py $^
 
 fofesparsemodel%: fofe_sparse_small_unigram_train fofengram%.txt
-	@rm -f $(wildcard fofesparsemodel$*.*)
+	@rm -f $(wildcard fofesparsemodel$*.* fofesparsemodel$*_e.*)
 	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py $^ $@
