@@ -10,10 +10,10 @@ from scipy.sparse import csr_matrix
 
 import pprint
 
-alpha=0.95
+alpha=0.9
 eta=1.0
-etadecay=0.999995
-weightdecay=1e-4
+etadecay=0.99999
+weightdecay=1e-5
 
 # UGH ... so much for DRY
 
@@ -75,71 +75,69 @@ nextprint=1
 print "%10s\t%10s\t%10s\t%11s\t%11s"%("delta t","average","since","example","learning")
 print "%10s\t%10s\t%10s\t%11s\t%11s"%("","loss","last","counter","rate")
 
-for ii in range(10):
-  f.seek(0,0)
-  for line in f:
-      yx=[word for word in line.split(' ')]
-      labels[bindex]=int(yx[0])-1
-  
-      for word in yx[1:]:
-          iv=[subword for subword in word.split(':')]
-          row.append(bindex)
-          col.append(int(iv[0])-1)
-          value.append(float(iv[1]))
-      
-      bindex=bindex+1
-  
-      if bindex >= batchsize:
-          sd=csr_matrix((value, (row, col)), shape=(batchsize,invocabsize), dtype='f')
-          data=sd.dot(embedding).reshape(batchsize,1,1,embeddingsize)
-          net.set_input_arrays(data,labels)
-          res=net.forward()
-          sumloss+=res['loss'][0,0,0,0]
-          sumsinceloss+=res['loss'][0,0,0,0]
-          net.backward()
-          data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
+for line in f:
+    yx=[word for word in line.split(' ')]
+    labels[bindex]=int(yx[0])-1
 
-          # y = W x
-          # y_k = \sum_l W_kl x_l
-          # df/dW_ij = \sum_k df/dy_k dy_k/dW_ij
-          #          = \sum_k df/dy_k (\sum_l 1_{i=k} 1_{j=l} x_l)
-          #          = \sum_k df/dy_k 1_{i=k} x_j
-          #          = df/dy_i x_j
-          # df/dW    = (df/dy)*x'
+    for word in yx[1:]:
+        iv=[subword for subword in word.split(':')]
+        row.append(bindex)
+        col.append(int(iv[0])-1)
+        value.append(float(iv[1]))
+    
+    bindex=bindex+1
 
-          sdtransdiff=sd.transpose().tocsr().dot(data_diff)
+    if bindex >= batchsize:
+        sd=csr_matrix((value, (row, col)), shape=(batchsize,invocabsize), dtype='f')
+        data=sd.dot(embedding).reshape(batchsize,1,1,embeddingsize)
+        net.set_input_arrays(data,labels)
+        res=net.forward()
+        sumloss+=res['loss'][0,0,0,0]
+        sumsinceloss+=res['loss'][0,0,0,0]
+        net.backward()
+        data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
 
-          momembeddiff=alpha*momembeddiff+lrs['embedding']*eta*sdtransdiff
-          embedding=embedding-momembeddiff
-          embedding=(1-lrs['embedding']*weightdecay*eta)*embedding
+        # y = W x
+        # y_k = \sum_l W_kl x_l
+        # df/dW_ij = \sum_k df/dy_k dy_k/dW_ij
+        #          = \sum_k df/dy_k (\sum_l 1_{i=k} 1_{j=l} x_l)
+        #          = \sum_k df/dy_k 1_{i=k} x_j
+        #          = df/dy_i x_j
+        # df/dW    = (df/dy)*x'
 
-          for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
-            blobnum=0
-            for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-              myeta=lrs[(name,blobnum)]*eta
-              momblob.data[:]=alpha*momblob.data[:]+myeta*blob.diff
-              blob.data[:]-=momblob.data[:]
-              blob.data[:]=(1-weightdecay*myeta)*blob.data[:]
-              blobnum=blobnum+1
+        sdtransdiff=sd.transpose().tocsr().dot(data_diff)
 
-          eta=eta*etadecay
-          value=[]
-          row=[]
-          col=[]
-          labels[:]=0
-          bindex=0
-          numupdates=numupdates+1
-          numsinceupdates=numsinceupdates+1
-          if numupdates >= nextprint:
-              net.save(sys.argv[3]+"."+str(numupdates))
-              h5f=h5py.File(sys.argv[3]+"_e."+str(numupdates))
-              h5f.create_dataset('embedding',data=embedding)
-              h5f.close()
-              now=time.time()
-              print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
-              nextprint=2*nextprint
-              numsinceupdates=0
-              sumsinceloss=0
+        momembeddiff=alpha*momembeddiff+lrs['embedding']*eta*sdtransdiff
+        embedding=embedding-momembeddiff
+        embedding=(1-lrs['embedding']*weightdecay*eta)*embedding
+
+        for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
+          blobnum=0
+          for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
+            myeta=lrs[(name,blobnum)]*eta
+            momblob.data[:]=alpha*momblob.data[:]+myeta*blob.diff
+            blob.data[:]-=momblob.data[:]
+            blob.data[:]=(1-weightdecay*myeta)*blob.data[:]
+            blobnum=blobnum+1
+
+        eta=eta*etadecay
+        value=[]
+        row=[]
+        col=[]
+        labels[:]=0
+        bindex=0
+        numupdates=numupdates+1
+        numsinceupdates=numsinceupdates+1
+        if numupdates >= nextprint:
+            net.save(sys.argv[3]+"."+str(numupdates))
+            h5f=h5py.File(sys.argv[3]+"_e."+str(numupdates))
+            h5f.create_dataset('embedding',data=embedding)
+            h5f.close()
+            now=time.time()
+            print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
+            nextprint=2*nextprint
+            numsinceupdates=0
+            sumsinceloss=0
 
 
 now=time.time()
