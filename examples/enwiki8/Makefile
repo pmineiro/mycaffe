@@ -7,7 +7,9 @@ SHELL=/bin/zsh
 all: 
 
 clean: 
-	rm -f $(wildcard histo8)
+	rm -f $(wildcard histo*) $(wildcard fofengram*.txt)
+	rm -f $(wildcard fofesparsemodel*.*) $(wildcard fofesparsemodel*_e.*)
+	rm -f $(wildcard fofesparserembedmodel*.*) $(wildcard fofesparserembedmodel*_e.*)
 
 numvocab=80000
 windowsize=2
@@ -29,3 +31,10 @@ fofemodel%: fofe_small_unigram_train fofengram%txt
 fofesparsemodel%: fofe_sparse_small_unigram_train fofengram%.txt
 	@rm -f $(wildcard fofesparsemodel$*.* fofesparsemodel$*_e.*)
 	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py $(word 1,$^) <(head -n `wc -l $(word 2,$^) | perl -lane 'print int(0.9*$$F[0])'` $(word 2,$^)) $@
+
+fofesparserembedmodel%: fofe_sparse_rembed_small_unigram_train fofengram%.txt
+	@rm -f $(wildcard fofesparserembedmodel$*.* fofesparserembedmodel$*_e.*)
+	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserembedmodel.py $(word 1,$^) <(head -n `wc -l $(word 2,$^) | perl -lane 'print int(0.9*$$F[0])'` $(word 2,$^)) $@
+
+sparserembedmodelclean:
+	@rm -f $(wildcard fofesparserembedmodel*.* fofesparserembedmodel*_e.*)

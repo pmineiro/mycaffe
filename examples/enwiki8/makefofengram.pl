@@ -31,7 +31,7 @@ while (defined ($_ = <>))
   {
     chomp;
     my @words = split /\s+/, $_;
-    my @enc = map { exists $vocab{$_} ? $vocab{$_}+2 : $vocabsize+1 } @words;
+    my @enc = map { exists $vocab{$_} ? $vocab{$_}+1 : $vocabsize+2 } @words;
     unshift (@enc, @prefix);
 
     my %state;
@@ -40,7 +40,8 @@ while (defined ($_ = <>))
       {
         my $offset = 0;
 
-        print "$enc[$pos+$windowsize]";
+        die "wtf" if $enc[$pos+$windowsize] <= 1;
+        print $enc[$pos+$windowsize];
 
         foreach my $relpos (1 .. ($windowsize-1))
           {

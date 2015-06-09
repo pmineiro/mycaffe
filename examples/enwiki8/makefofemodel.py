@@ -49,7 +49,7 @@ for ii in range(10):
   f.seek(0,0)
   for line in f:
       yx=[word for word in line.split(' ')]
-      labels[bindex]=int(yx[0])-1
+      labels[bindex]=int(yx[0])-2
   
       for word in yx[1:]:
           iv=[subword for subword in word.split(':')]
