@@ -7,7 +7,8 @@ SHELL=/bin/zsh
 all: 
 
 clean: 
-	rm -f $(wildcard histo8)
+	rm -f $(wildcard histo*) $(wildcard fofengram*.txt)
+	rm -f $(wildcard fofesparsemodel*.*) $(wildcard fofesparsemodel*_e.*)
 
 numvocab=80000
 windowsize=2

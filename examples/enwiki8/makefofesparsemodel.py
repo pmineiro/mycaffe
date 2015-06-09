@@ -8,7 +8,7 @@ import sys
 import time
 from scipy.sparse import csr_matrix
 
-import pprint
+np.random.seed(8675309)
 
 alpha=0.9
 eta=1.0
@@ -26,10 +26,6 @@ lrs[('ip2',1)]=1.25
 lrs[('ip3',0)]=0.75
 lrs[('ip3',1)]=1
 
-#np.seterr(divide='raise',over='raise',invalid='raise')
-
-np.random.seed(8675309)
-
 vocabsize=80000
 windowsize=2
 rawembeddingsize=200
@@ -42,6 +38,7 @@ outvocabsize=vocabsize+1
 preembed=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
 preembed[:]=np.random.standard_normal(size=(invocabsize,embeddingsize))
 embedding=math.sqrt(embeddingsize)*np.linalg.qr(preembed)[0]
+del preembed
 
 net = caffe.Net(sys.argv[1])
 net.set_mode_gpu()
@@ -77,7 +74,7 @@ print "%10s\t%10s\t%10s\t%11s\t%11s"%("","loss","last","counter","rate")
 
 for line in f:
     yx=[word for word in line.split(' ')]
-    labels[bindex]=int(yx[0])-1
+    labels[bindex]=int(yx[0])-2
 
     for word in yx[1:]:
         iv=[subword for subword in word.split(':')]
@@ -150,22 +147,21 @@ h5f.close()
 # import to matlab:
 # >> Z=h5read('fofesparsemodel9_e','/embedding');
 
-# GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py fofe_sparse_small_unigram_train fofengram9.txt
-#  delta t         average           since          example        learning
-#                      loss            last          counter            rate
-#     3.072         11.2893         11.2893             1500        0.999995
-#     5.936         11.2832         11.2772             3000         0.99999
-#    11.302         11.2623         11.2413             6000         0.99998
-#    21.278         11.1828         11.1033            12000         0.99996
-#    40.829         10.7746         10.3665            24000         0.99992
-#    79.384         10.0108          9.2469            48000         0.99984
-#   153.303          9.0752          8.1396            96000         0.99968
-#   301.583          8.1531          7.2311           192000         0.99936
-#   599.243          7.4186          6.6840           384000        0.998721
-#  1186.873          6.8025          6.1864           768000        0.997443
-#  2514.893          6.3315          5.8605          1536000        0.994893
-#  6001.129          5.9819          5.6323          3072000        0.989812
-# 13879.116          5.7111          5.4402          6144000        0.979728
-# 30165.481          5.4921          5.2732         12288000        0.959867
-# 63029.206          5.3135          5.1349         24576000        0.921345
-#129721.443          5.1681          5.0228         49152000        0.848877
+# GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py fofe_sparse_small_unigram_train <(head -n `wc -l fofengram9.txt | perl -lane 'print int(0.9*$F[0])'` fofengram9.txt) fofesparsemodel9
+#    delta t         average           since          example        learning
+#                       loss            last          counter            rate
+#      3.324         11.2893         11.2893             1500         0.99999
+#      6.609         11.2832         11.2772             3000         0.99998
+#     12.333         11.2623         11.2413             6000         0.99996
+#     22.722         11.1827         11.1032            12000         0.99992
+#     42.765         10.7750         10.3673            24000         0.99984
+#     81.470         10.0174          9.2598            48000         0.99968
+#    158.956          9.0810          8.1445            96000         0.99936
+#    307.732          8.1580          7.2351           192000        0.998721
+#    598.225          7.4279          6.6979           384000        0.997443
+#   1180.870          6.8014          6.1749           768000        0.994893
+#   2646.052          6.3289          5.8563          1536000        0.989812
+#   6218.354          5.9774          5.6260          3072000        0.979728
+#  14266.073          5.7044          5.4313          6144000        0.959867
+#  31046.187          5.4776          5.2508         12288000        0.921345
+
