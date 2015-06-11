@@ -2,6 +2,7 @@
 
 import caffe
 import math
+from math import sqrt
 import h5py
 import numpy as np
 import sys
@@ -10,9 +11,11 @@ import warnings
 from scipy.sparse import csr_matrix
 
 alpha=0.9
-eta=1.0
+etastart=1.0
 etadecay=0.99999
 weightdecay=1e-5
+
+# TODO: oversampling and final SVD
 
 # UGH ... so much for DRY
 
@@ -37,28 +40,9 @@ embeddingsize=windowsize*rawembeddingsize
 invocabsize=windowsize*(vocabsize+2)
 outvocabsize=vocabsize+1
 
-preembed=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
-preembed[:]=np.random.standard_normal(size=(invocabsize,embeddingsize))
-embedding=math.sqrt(embeddingsize)*np.linalg.qr(preembed)[0]
-
 prelabelembed=np.zeros(shape=(outvocabsize,labelembeddingsize),dtype='f')
 prelabelembed[:]=np.random.standard_normal(size=(outvocabsize,labelembeddingsize))
 labelembedding=np.linalg.qr(prelabelembed)[0]
-
-net = caffe.Net(sys.argv[1])
-net.set_mode_cpu()
-net.set_phase_train()
-
-momnet = caffe.Net(sys.argv[1])
-momnet.set_mode_cpu()
-momnet.set_phase_train()
-
-for (layer,momlayer) in zip(net.layers,momnet.layers):
-  for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-    blob.data[:]=0.01*np.random.standard_normal(size=blob.data.shape)
-    momblob.data[:]=np.zeros(blob.data.shape,dtype='f')
-
-momembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
 
 baserates=np.zeros(outvocabsize)
 with open(sys.argv[2], 'r') as f:
@@ -68,123 +52,170 @@ with open(sys.argv[2], 'r') as f:
 
 baserates=baserates/np.sum(baserates)
 
-row=[]
-col=[]
-value=[]
-labels=np.zeros(batchsize,dtype='f')
-labelvalues=np.ones(batchsize,dtype='f')
-bindex=0
-start=time.time()
-numsinceupdates=0
-numupdates=0
-sumloss=0
-sumsinceloss=0
-nextprint=1
+scalefac=10000
+expectedimportance=baserates.dot(np.divide(sqrt(scalefac*baserates[0]),np.sqrt(baserates[0]+(scalefac-1)*baserates)))
 
-print "%10s\t%10s\t%10s\t%11s\t%11s"%("delta t","average","since","example","learning")
-print "%10s\t%10s\t%10s\t%11s\t%11s"%("","loss","last","counter","rate")
+maxlinenum=int(sys.argv[3])
 
-with open(sys.argv[3], 'r') as f:
-  for line in f:
-    yx=[word for word in line.split(' ')]
-    labels[bindex]=int(yx[0])-2
-    # TODO: figure out logistic reweighting
-    #labelvalues[bindex]=sqrt(100*baserates[0])/sqrt(baserates[0]+99*baserates[int(yx[0])-2])
+for passnum in range(5):
 
-    for word in yx[1:]:
-      iv=[subword for subword in word.split(':')]
-      row.append(bindex)
-      col.append(int(iv[0])-1)
-      value.append(float(iv[1]))
-    
-    bindex=bindex+1
+  orthopass=(passnum % 2 == 1)
 
-    if bindex >= batchsize:
-      sd=csr_matrix((value, (row, col)),                    		\
-                    shape=(batchsize,invocabsize),          		\
-                    dtype='f')
-      data=sd.dot(embedding).reshape(batchsize,1,1,embeddingsize)
-      sl=csr_matrix((labelvalues,                                   	\
-                    (np.linspace(0,batchsize-1,batchsize),          	\
-                     labels)),                                      	\
-                     shape=(batchsize,outvocabsize),                	\
-                     dtype='f')
-      projlabels=sl.dot(labelembedding).reshape(batchsize,labelembeddingsize,1,1)
-      net.set_input_arrays(data,labels)
-      res=net.forward()
-      ip3diff=res['ip3']-projlabels
-      sumloss+=np.sum(np.square(ip3diff))/batchsize
-      sumsinceloss+=np.sum(np.square(ip3diff))/batchsize
-      net.blobs['ip3'].diff[:]=(1.0/batchsize)*ip3diff
-      net.backward()
-      data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
+  if orthopass:
+    yembedhat=np.zeros(shape=(outvocabsize,labelembeddingsize),dtype='d')
+  else:
+    preembed=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
+    preembed[:]=np.random.standard_normal(size=(invocabsize,embeddingsize))
+    embedding=sqrt(embeddingsize)*np.linalg.qr(preembed)[0]
 
-      # y = W x
-      # y_k = \sum_l W_kl x_l
-      # df/dW_ij = \sum_k df/dy_k dy_k/dW_ij
-      #          = \sum_k df/dy_k (\sum_l 1_{i=k} 1_{j=l} x_l)
-      #          = \sum_k df/dy_k 1_{i=k} x_j
-      #          = df/dy_i x_j
-      # df/dW    = (df/dy)*x'
+    net = caffe.Net(sys.argv[1])
+    net.set_mode_cpu()
+    net.set_phase_train()
 
-      sdtransdiff=sd.transpose().tocsr().dot(data_diff)
+    momnet = caffe.Net(sys.argv[1])
+    momnet.set_mode_cpu()
+    momnet.set_phase_train()
 
-      momembeddiff=alpha*momembeddiff+lrs['embedding']*eta*sdtransdiff
-      embedding=embedding-momembeddiff
-      embedding=(1-lrs['embedding']*weightdecay*eta)*embedding
+    for (layer,momlayer) in zip(net.layers,momnet.layers):
+      for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
+        blob.data[:]=0.01*np.random.standard_normal(size=blob.data.shape)
+        momblob.data[:]=np.zeros(blob.data.shape,dtype='f')
 
-      for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
-        blobnum=0
-        for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-          myeta=lrs[(name,blobnum)]*eta
-          momblob.data[:]=alpha*momblob.data[:]+myeta*blob.diff
-          blob.data[:]-=momblob.data[:]
-          blob.data[:]=(1-weightdecay*myeta)*blob.data[:]
-          blobnum=blobnum+1
+    momembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
 
-      eta=eta*etadecay
-      value=[]
-      row=[]
-      col=[]
-      labels[:]=0
-      bindex=0
-      numupdates=numupdates+1
-      numsinceupdates=numsinceupdates+1
-      if numupdates >= nextprint:
-          net.save(sys.argv[4]+"."+str(numupdates))
-          h5f=h5py.File(sys.argv[4]+"_e."+str(numupdates))
-          h5f.create_dataset('embedding',data=embedding)
-          h5f.create_dataset('labelembedding',data=labelembedding)
-          h5f.close()
-          now=time.time()
-          print "%10.3f\t%10.4g\t%10.4g\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
-          nextprint=2*nextprint
-          numsinceupdates=0
-          sumsinceloss=0
+  row=[]
+  col=[]
+  value=[]
+  labels=np.zeros(batchsize,dtype='f')
+  labelvalues=np.ones(batchsize,dtype='f')
+  importance=np.ones(batchsize,dtype='f')
+  bindex=0
+  start=time.time()
+  sumloss=0
+  sumsinceloss=0
+  sumimp=0
+  sumsinceimp=0
+  numupdates=0
+  nextprint=1
+  embedsum=np.zeros(labelembeddingsize,dtype='d')
+  embedsumsq=np.zeros(labelembeddingsize,dtype='d')
 
-now=time.time()
-print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
-net.save(sys.argv[4])
-h5f=h5py.File(sys.argv[4]+"_e")
-h5f.create_dataset('embedding',data=embedding)
-h5f.create_dataset('labelembedding',data=labelembedding)
-h5f.close()
+  if orthopass:
+    eta=0
+  else:
+    eta=etastart
+
+  print "%4s  %10s  %8s  %8s  %10s  %10s"%("pass","delta t","average","since","example","learning")
+  print "%4s  %10s  %8s  %8s  %10s  %10s"%("","","loss","last","counter","rate")
+
+  with open(sys.argv[4], 'r') as f:
+    linenum=0
+    for line in f:
+      linenum=linenum+1
+      if linenum > maxlinenum:
+        break
+  
+      yx=[word for word in line.split(' ')]
+      labels[bindex]=int(yx[0])-2
+      labelvalues[bindex]=1
+      importance[bindex]=(1.0/expectedimportance)*sqrt(scalefac*baserates[0])/sqrt(baserates[0]+(scalefac-1)*baserates[int(yx[0])-2])
+  
+      for word in yx[1:]:
+        iv=[subword for subword in word.split(':')]
+        row.append(bindex)
+        col.append(int(iv[0])-1)
+        value.append(float(iv[1]))
+      
+      bindex=bindex+1
+  
+      if bindex >= batchsize:
+        sd=csr_matrix((value, (row, col)),                    		\
+                      shape=(batchsize,invocabsize),          		\
+                      dtype='f')
+        data=sd.dot(embedding).reshape(batchsize,1,1,embeddingsize)
+        sl=csr_matrix((labelvalues,                                   	\
+                      (np.linspace(0,batchsize-1,batchsize),          	\
+                       labels)),                                      	\
+                       shape=(batchsize,outvocabsize),                	\
+                       dtype='f')
+        projlabels=sl.dot(labelembedding)
+        embedsum+=importance.dot(projlabels)
+        embedsumsq+=importance.dot(np.square(projlabels))
+        net.set_input_arrays(data,labels)
+        res=net.forward()
+        ip3diff=res['ip3']-projlabels.reshape(batchsize,labelembeddingsize,1,1)
+        thisloss=importance.dot(np.sum(np.square(ip3diff),axis=1).reshape(batchsize))
+        sumloss+=thisloss
+        sumsinceloss+=thisloss
+        sumimp+=np.sum(importance)
+        sumsinceimp+=np.sum(importance)
+
+        if orthopass:
+          yembedhat+=np.transpose(sl).dot(np.multiply(res['ip3'].reshape((batchsize,labelembeddingsize)),importance[:, np.newaxis]))
+        else:
+          net.blobs['ip3'].diff[:]=(1.0/batchsize)*np.multiply(ip3diff,importance[:, np.newaxis, np.newaxis, np.newaxis])
+          net.backward()
+          data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
+  
+          # y = W x
+          # y_k = \sum_l W_kl x_l
+          # df/dW_ij = \sum_k df/dy_k dy_k/dW_ij
+          #          = \sum_k df/dy_k (\sum_l 1_{i=k} 1_{j=l} x_l)
+          #          = \sum_k df/dy_k 1_{i=k} x_j
+          #          = df/dy_i x_j
+          # df/dW    = (df/dy)*x'
+  
+          sdtransdiff=sd.transpose().tocsr().dot(data_diff)
+  
+          momembeddiff=alpha*momembeddiff+lrs['embedding']*eta*sdtransdiff
+          embedding=embedding-momembeddiff
+          embedding=(1-lrs['embedding']*weightdecay*eta)*embedding
+  
+          for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
+            blobnum=0
+            for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
+              myeta=lrs[(name,blobnum)]*eta
+              momblob.data[:]=alpha*momblob.data[:]+myeta*blob.diff
+              blob.data[:]-=momblob.data[:]
+              blob.data[:]=(1-weightdecay*myeta)*blob.data[:]
+              blobnum=blobnum+1
+  
+        eta=eta*etadecay
+        value=[]
+        row=[]
+        col=[]
+        labels[:]=0
+        bindex=0
+        numupdates=numupdates+1
+        if numupdates >= nextprint:
+            now=time.time()
+            print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %10.6g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,eta)
+            nextprint=2*nextprint
+            sumsinceimp=0
+            sumsinceloss=0
+
+  now=time.time()
+  print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %10.6g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,eta)
+  embedsum*=1.0/sumimp
+  embedsumsq*=1.0/sumimp
+  print "best constant loss: %g"%(np.sum(embedsumsq-np.square(embedsum)))
+
+  if orthopass:
+    labelembedding=np.linalg.qr(yembedhat)[0].astype(dtype='f')
+    h5f=h5py.File(sys.argv[5]+"_e."+str(passnum))
+    h5f.create_dataset('labelembedding',data=labelembedding)
+    h5f.create_dataset('yembedhat',data=yembedhat)
+    h5f.close()
+    del net
+    del embedding
+    del yembedhat
+  else:
+    net.save(sys.argv[5]+"."+str(passnum))
+    h5f=h5py.File(sys.argv[5]+"_e."+str(passnum))
+    h5f.create_dataset('embedding',data=embedding)
+    h5f.create_dataset('labelembedding',data=labelembedding)
+    h5f.close()
+    del momnet
 
 # import to matlab:
 # >> Z=h5read('fofesparsemodel9_e','/embedding');
-
-#   delta t         average           since          example        learning
-#                      loss            last          counter            rate
-#    57.005         0.02397         0.02397             1500         0.99999
-#    57.945         0.01326        0.002548             3000         0.99998
-#    59.543         0.01571         0.01815             6000         0.99996
-#    62.579         0.01213        0.008558            12000         0.99992
-#    68.456        0.009639        0.007146            24000         0.99984
-#    80.268        0.006736        0.003833            48000         0.99968
-#   102.902        0.004691        0.002646            96000         0.99936
-#   148.173        0.003596          0.0025           192000        0.998721
-#   238.055        0.003047        0.002498           384000        0.997443
-#   417.912        0.002772        0.002497           768000        0.994893
-#   781.941        0.002632        0.002492          1536000        0.989812
-#  1504.750        0.002555        0.002477          3072000        0.979728
-#  2982.468        0.002506        0.002458          6144000        0.959867
