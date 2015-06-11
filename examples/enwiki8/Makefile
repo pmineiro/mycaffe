@@ -41,7 +41,15 @@ fofesparsemodel%: fofe_sparse_small_unigram_train numlinesfofengram% fofengram%.
 
 fofesparserembedmodel%: fofe_sparse_rembed_small_unigram_train fofebaserates%.txt numlinesfofengram% fofengram%.txt
 	@rm -f $(wildcard fofesparserembedmodel$* fofesparserembedmodel$*_e fofesparserembedmodel$*.* fofesparserembedmodel$*_e.*)
-	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserembedmodel.py $(word 1,$^) $(word 2,$^) `cat $(word 3,$^) | perl -lane 'print int(0.05*$$F[0])'` $(word 4,$^) $@
+	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserembedmodel.py $(word 1,$^) $(word 2,$^) `cat $(word 3,$^) | perl -lane 'print int(0.25*$$F[0])'` $(word 4,$^) $@
 
 sparserembedmodelclean:
 	@rm -f $(wildcard fofesparserembedmodel*.* fofesparserembedmodel*_e.*)
+
+fofesparserembedlogisticmodel%: fofesparserembedmodel% fofe_sparse_rembed_small_unigram_train fofe_sparse_rembed_small_unigram_logistic_train numlinesfofengram% fofengram%.txt
+	@rm -f $(wildcard fofesparserembedlogisticmodel*.* fofesparserembedlogisticmodel*_e.*)
+	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserembedlogisticmodel.py $(word 1,$^)_e $(word 2,$^) $(word 1,$^) $(word 3,$^) `cat $(word 4,$^) | perl -lane 'print int(0.25*$$F[0])'` $(word 5,$^) $@
+
+sparserembedlogisticmodelclean:
+	@rm -f $(wildcard fofesparserembedlogisticmodel*.* fofesparserembedlogisticmodel*_e.*)
+
