@@ -2,5 +2,8 @@ enwik?.zip
 *.hdf5
 histo?
 fofengram?.txt
+fofebaserates?.txt
 fofesparsemodel*
+fofesparserembedlogisticmodel*
 fofesparserembedmodel*
+numlinesfofengram?

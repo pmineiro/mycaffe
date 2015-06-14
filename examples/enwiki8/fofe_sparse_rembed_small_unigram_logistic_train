@@ -1,0 +1,38 @@
+name: "Fofe"
+#force_backward: true
+layers {
+  name: "input"
+  type: MEMORY_DATA
+  top: "data"
+  top: "label"
+  memory_data_param {
+    batch_size: 1500
+    channels: 200
+    height: 1
+    width: 1
+  }
+}
+layers {
+  name: "ip3"
+  type: INNER_PRODUCT
+  bottom: "data"
+  top: "ip3"
+  blobs_lr: 1
+  blobs_lr: 2
+  inner_product_param {
+    num_output: 80001
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layers {
+  name: "loss"
+  type: SOFTMAX_LOSS
+  bottom: "ip3"
+  bottom: "label"
+  top: "loss"
+}
