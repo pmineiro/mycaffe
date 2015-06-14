@@ -48,7 +48,7 @@ sparserembedmodelclean:
 
 fofesparserembedlogisticmodel%: fofesparserembedmodel% fofe_sparse_rembed_small_unigram_train fofe_sparse_rembed_small_unigram_logistic_train numlinesfofengram% fofengram%.txt
 	@rm -f $(wildcard fofesparserembedlogisticmodel*.* fofesparserembedlogisticmodel*_e.*)
-	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserembedlogisticmodel.py $(word 1,$^)_e $(word 2,$^) $(word 1,$^) $(word 3,$^) `cat $(word 4,$^) | perl -lane 'print int(0.25*$$F[0])'` $(word 5,$^) $@
+	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserembedlogisticmodel.py $(word 1,$^)_e $(word 2,$^) $(word 1,$^) $(word 3,$^) `cat $(word 4,$^) | perl -lane 'print int(0.9*$$F[0])'` $(word 5,$^) $@
 
 sparserembedlogisticmodelclean:
 	@rm -f $(wildcard fofesparserembedlogisticmodel*.* fofesparserembedlogisticmodel*_e.*)

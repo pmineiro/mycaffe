@@ -6,7 +6,7 @@ layers {
   top: "data"
   top: "label"
   memory_data_param {
-    batch_size: 1500
+    batch_size: 6000
     channels: 1
     height: 1
     width: 400  

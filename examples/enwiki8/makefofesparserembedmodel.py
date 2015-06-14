@@ -2,7 +2,7 @@
 
 import caffe
 import math
-from math import sqrt
+from math import sqrt, pow
 import h5py
 import numpy as np
 import os
@@ -11,9 +11,10 @@ import time
 import warnings
 from scipy.sparse import csr_matrix
 
-alpha=0.9
-etastart=1.0
-etadecay=0.99999
+alpha=0.8
+etastart=1.0 
+initialt=100.0
+powert=1.0
 weightdecay=1e-5
 
 # TODO: oversampling and final SVD
@@ -21,11 +22,11 @@ weightdecay=1e-5
 # UGH ... so much for DRY
 
 lrs=dict()
-lrs['embedding']=1
-lrs[('ip1',0)]=1.5
-lrs[('ip1',1)]=1.75
-lrs[('ip2',0)]=1
-lrs[('ip2',1)]=1.25
+lrs['embedding']=0.01
+lrs[('ip1',0)]=0.01
+lrs[('ip1',1)]=0.5  
+lrs[('ip2',0)]=0.01
+lrs[('ip2',1)]=0.5 
 lrs[('ip3',0)]=0.75
 lrs[('ip3',1)]=1
 
@@ -34,7 +35,7 @@ np.random.seed(8675309)
 vocabsize=80000
 windowsize=2
 rawembeddingsize=200
-batchsize=1500 
+batchsize=6000 
 labelembeddingsize=200
 
 embeddingsize=windowsize*rawembeddingsize
@@ -67,7 +68,7 @@ for passnum in range(maxpasses):
   else:
     preembed=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
     preembed[:]=np.random.standard_normal(size=(invocabsize,embeddingsize))
-    embedding=sqrt(embeddingsize)*np.linalg.qr(preembed)[0]
+    embedding=np.linalg.qr(preembed)[0]
 
     net = caffe.Net(sys.argv[1])
     net.set_mode_cpu()
@@ -79,7 +80,10 @@ for passnum in range(maxpasses):
 
     for (layer,momlayer) in zip(net.layers,momnet.layers):
       for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-        blob.data[:]=0.01*np.random.standard_normal(size=blob.data.shape)
+        if blob.data.shape[2] > 1:
+          blob.data[:]=np.transpose(np.linalg.qr(np.random.standard_normal(size=(blob.data.shape[3],blob.data.shape[2])))[0])
+        else:
+          blob.data[:]=0
         momblob.data[:]=np.zeros(blob.data.shape,dtype='f')
 
     momembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
@@ -100,6 +104,7 @@ for passnum in range(maxpasses):
   nextprint=1
   embedsum=np.zeros(labelembeddingsize,dtype='d')
   embedsumsq=np.zeros(labelembeddingsize,dtype='d')
+  lastloss=0;
 
   if orthopass:
     eta=0
@@ -151,10 +156,20 @@ for passnum in range(maxpasses):
         sumimp+=np.sum(importance)
         sumsinceimp+=np.sum(importance)
 
+        if thisloss < lastloss:
+          eta=(50.0/49.0)*eta
+        else:
+          eta=(49.0/50.0)*eta
+
+        lastloss=thisloss;
+
         if orthopass:
           yembedhat+=np.transpose(sl).dot(np.multiply(res['ip3'].reshape((batchsize,labelembeddingsize)),importance[:, np.newaxis]))
         else:
-          net.blobs['ip3'].diff[:]=(1.0/batchsize)*np.multiply(ip3diff,importance[:, np.newaxis, np.newaxis, np.newaxis])
+          myeta=eta*pow(initialt/(initialt+numupdates),powert);
+          xticx=np.sum(np.square(res['ip3']),axis=1).reshape(batchsize)
+          impaware=-np.divide(np.expm1(-myeta*np.multiply(importance,xticx)),xticx)
+          net.blobs['ip3'].diff[:]=(1.0/batchsize)*np.multiply(ip3diff,impaware[:, np.newaxis, np.newaxis, np.newaxis])
           net.backward()
           data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
   
@@ -167,21 +182,20 @@ for passnum in range(maxpasses):
           # df/dW    = (df/dy)*x'
   
           sdtransdiff=sd.transpose().tocsr().dot(data_diff)
-  
-          momembeddiff=alpha*momembeddiff+lrs['embedding']*eta*sdtransdiff
+
+          momembeddiff=alpha*momembeddiff+lrs['embedding']*sdtransdiff
           embedding=embedding-momembeddiff
-          embedding=(1-lrs['embedding']*weightdecay*eta)*embedding
+          embedding=(1-lrs['embedding']*weightdecay*myeta)*embedding
   
           for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
             blobnum=0
             for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-              myeta=lrs[(name,blobnum)]*eta
-              momblob.data[:]=alpha*momblob.data[:]+myeta*blob.diff
+              layereta=lrs[(name,blobnum)]
+              momblob.data[:]=alpha*momblob.data[:]+layereta*blob.diff
               blob.data[:]-=momblob.data[:]
-              blob.data[:]=(1-weightdecay*myeta)*blob.data[:]
+              blob.data[:]=(1-weightdecay*layereta)*blob.data[:]
               blobnum=blobnum+1
   
-        eta=eta*etadecay
         value=[]
         row=[]
         col=[]
@@ -190,13 +204,13 @@ for passnum in range(maxpasses):
         numupdates=numupdates+1
         if numupdates >= nextprint:
             now=time.time()
-            print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %10.6g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,eta)
+            print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %10.6g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,myeta)
             nextprint=2*nextprint
             sumsinceimp=0
             sumsinceloss=0
 
   now=time.time()
-  print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %10.6g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,eta)
+  print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %10.6g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,myeta)
   embedsum*=1.0/sumimp
   embedsumsq*=1.0/sumimp
   print "best constant loss: %g"%(np.sum(embedsumsq-np.square(embedsum)))
@@ -218,104 +232,105 @@ for passnum in range(maxpasses):
     h5f.close()
     del momnet
 
-os.link(sys.argv[5]+"."+str(maxpasses),sys.argv[5])
-os.link(sys.argv[5]+"_e."+str(maxpasses),sys.argv[5]+"_e")
+os.link(sys.argv[5]+"."+str(maxpasses-1),sys.argv[5])
+os.link(sys.argv[5]+"_e."+str(maxpasses-1),sys.argv[5]+"_e")
 
 # import to matlab:
 # >> Z=h5read('fofesparsemodel9_e','/embedding');
 # 
 # pass     delta t   average     since     example    learning
 #                       loss      last     counter        rate
-#    0       0.781   0.02375   0.02375     1538.13     0.99999
-#    0       1.538   0.01324  0.002612     3060.34     0.99998
-#    0       3.058   0.01561   0.01809     5994.37     0.99996
-#    0       6.162   0.01181  0.007992       11973     0.99992
-#    0      12.297  0.009268  0.006697       23794     0.99984
-#    0      24.853  0.006453  0.003628     47501.1     0.99968
-#    0      49.239  0.004545  0.002675     95997.5     0.99936
-#    0      97.780  0.003539  0.002532      191765    0.998721
-#    0     194.617  0.003036   0.00253      382278    0.997443
-#    0     388.307  0.002782   0.00253      767336    0.994893
-#    0     774.498  0.002655  0.002528  1.53489e+06    0.989812
-#    0    1549.328  0.002591  0.002527  3.07183e+06    0.979728
-#    0    3099.920  0.002559  0.002527   6.145e+06    0.959867
-#    0    6198.609  0.002543  0.002526  1.2283e+07    0.921345
-#    0   12323.411  0.002533  0.002524  2.45718e+07    0.848877
-#    0   15559.550  0.002531  0.002521  3.10672e+07    0.812889
+#    0       0.760   0.02375   0.02375     1538.13           1
+#    0       1.517    0.0132  0.002547     3060.34    0.995037
+#    0       3.027   0.01347   0.01375     5994.37    0.985329
+#    0       6.024  0.009409  0.005334       11973    0.966736
+#    0      12.040  0.006588   0.00373       23794    0.932505
+#    0      24.102  0.004608  0.002622     47501.1    0.873704
+#    0      48.409  0.003555  0.002523     95997.5     0.78326
+#    0      96.835  0.003038  0.002519      191765    0.663723
+#    0     194.681  0.002777  0.002515      382278    0.530745
+#    0     388.702  0.002644  0.002512      767336    0.404557
+#    0     777.082  0.002576  0.002507  1.53489e+06    0.298408
+#    0    1552.490   0.00254  0.002505  3.07183e+06    0.215816
+#    0    3121.818  0.002522  0.002503   6.145e+06    0.154395
+#    0    6255.429  0.002512  0.002502  1.2283e+07    0.109824
+#    0   12549.258  0.002506    0.0025  2.45718e+07     0.07789
+#    0   15912.412  0.002504  0.002499  3.10672e+07   0.0693125
 # best constant loss: 0.00249742
 # pass     delta t   average     since     example    learning
 #                       loss      last     counter        rate
-#    1       0.211   0.00253   0.00253     1538.13           0
-#    1       0.327  0.002518  0.002506     3060.34           0
-#    1       0.548  0.002523  0.002527     5994.37           0
-#    1       1.006  0.002521  0.002519       11973           0
-#    1       1.925  0.002525  0.002528       23794           0
-#    1       3.733  0.002523  0.002521     47501.1           0
-#    1       7.290  0.002522  0.002521     95997.5           0
-#    1      14.420  0.002522  0.002523      191765           0
-#    1      28.661  0.002522  0.002523      382278           0
-#    1      57.426  0.002523  0.002523      767336           0
-#    1     114.830  0.002522  0.002521  1.53489e+06           0
-#    1     229.555  0.002522  0.002521  3.07183e+06           0
-#    1     460.655  0.002522  0.002522   6.145e+06           0
-#    1     923.599  0.002522  0.002522  1.2283e+07           0
-#    1    1848.977  0.002522  0.002522  2.45718e+07           0
-#    1    2338.188  0.002522  0.002521  3.10672e+07           0
+#    1       0.212  0.002506  0.002506     1538.13   0.0693125
+#    1       0.334  0.002496  0.002486     3060.34   0.0693125
+#    1       0.556    0.0025  0.002504     5994.37   0.0693125
+#    1       1.031  0.002499  0.002498       11973   0.0693125
+#    1       1.931  0.002502  0.002506       23794   0.0693125
+#    1       3.769    0.0025  0.002498     47501.1   0.0693125
+#    1       7.356  0.002499  0.002498     95997.5   0.0693125
+#    1      14.672    0.0025    0.0025      191765   0.0693125
+#    1      29.179    0.0025    0.0025      382278   0.0693125
+#    1      58.507    0.0025    0.0025      767336   0.0693125
+#    1     117.408  0.002499  0.002498  1.53489e+06   0.0693125
+#    1     235.631  0.002499  0.002499  3.07183e+06   0.0693125
+#    1     472.295  0.002499  0.002499   6.145e+06   0.0693125
+#    1     944.054  0.002499  0.002499  1.2283e+07   0.0693125
+#    1    1871.985  0.002499  0.002499  2.45718e+07   0.0693125
+#    1    2363.831  0.002499  0.002499  3.10672e+07   0.0693125
 # best constant loss: 0.00249742
+# 
+# ss     delta t   average     since     example    learning
+#                       loss      last     counter        rate
+#    2       0.750   0.07147   0.07147     1538.13           1
+#    2       1.502   0.06051   0.04944     3060.34    0.995037
+#    2       2.988   0.06218   0.06392     5994.37    0.985329
+#    2       6.016   0.05711   0.05203       11973    0.966736
+#    2      12.126   0.05458   0.05201       23794    0.932505
+#    2      24.387   0.05175   0.04891     47501.1    0.873704
+#    2      48.707    0.0499   0.04809     95997.5     0.78326
+#    2      97.077   0.04973   0.04957      191765    0.663723
+#    2     193.572   0.04967   0.04961      382278    0.530745
+#    2     384.825   0.04933   0.04899      767336    0.404557
+#    2     767.438    0.0492   0.04907  1.53489e+06    0.298408
+#    2    1535.554   0.04905    0.0489  3.07183e+06    0.215816
+#    2    3071.088   0.04889   0.04872   6.145e+06    0.154395
+#    2    6168.534   0.04881   0.04872  1.2283e+07    0.109824
+#    2   12406.005   0.04863   0.04845  2.45718e+07     0.07789
+#    2   15725.018   0.04856   0.04833  3.10672e+07   0.0693125
+# best constant loss: 0.049063
 # pass     delta t   average     since     example    learning
 #                       loss      last     counter        rate
-#    2       0.770     0.054     0.054     1538.13     0.99999
-#    2       1.549   0.04168   0.02922     3060.34     0.99998
-#    2       3.112   0.04681   0.05217     5994.37     0.99996
-#    2       6.167   0.04181    0.0368       11973     0.99992
-#    2      12.274    0.0396   0.03736       23794     0.99984
-#    2      24.742   0.03623   0.03285     47501.1     0.99968
-#    2      49.298   0.03344   0.03071     95997.5     0.99936
-#    2      98.779   0.03242   0.03139      191765    0.998721
-#    2     197.338   0.03217   0.03192      382278    0.997443
-#    2     393.757   0.03174   0.03131      767336    0.994893
-#    2     789.314   0.03151   0.03129  1.53489e+06    0.989812
-#    2    1578.830   0.03119   0.03087  3.07183e+06    0.979728
-#    2    3158.645    0.0303   0.02941   6.145e+06    0.959867
-#    2    6352.179   0.02806   0.02582  1.2283e+07    0.921345
-#    2   12745.367   0.02595   0.02383  2.45718e+07    0.848877
-#    2   16115.160   0.02537   0.02318  3.10672e+07    0.812889
-# best constant loss: 0.0314169
+#    3       0.212   0.04451   0.04451     1538.13   0.0693125
+#    3       0.329   0.04657   0.04865     3060.34   0.0693125
+#    3       0.561    0.0479   0.04929     5994.37   0.0693125
+#    3       1.005   0.04786   0.04782       11973   0.0693125
+#    3       1.903   0.04877    0.0497       23794   0.0693125
+#    3       3.687   0.04837   0.04797     47501.1   0.0693125
+#    3       7.308   0.04783   0.04731     95997.5   0.0693125
+#    3      14.704    0.0483   0.04876      191765   0.0693125
+#    3      29.392   0.04856   0.04882      382278   0.0693125
+#    3      58.141   0.04841   0.04825      767336   0.0693125
+#    3     116.531   0.04838   0.04836  1.53489e+06   0.0693125
+#    3     234.848   0.04833   0.04828  3.07183e+06   0.0693125
+#    3     468.013   0.04828   0.04823   6.145e+06   0.0693125
+#    3     935.627   0.04833   0.04839  1.2283e+07   0.0693125
+#    3    1867.108   0.04831   0.04829  2.45718e+07   0.0693125
+#    3    2401.905   0.04831   0.04829  3.10672e+07   0.0693125
+# best constant loss: 0.049063
 # pass     delta t   average     since     example    learning
 #                       loss      last     counter        rate
-#    3       0.233   0.02105   0.02105     1538.13           0
-#    3       0.370   0.02063   0.02021     3060.34           0
-#    3       0.595   0.02245   0.02435     5994.37           0
-#    3       1.045   0.02178   0.02111       11973           0
-#    3       1.968   0.02294    0.0241       23794           0
-#    3       3.750   0.02313   0.02332     47501.1           0
-#    3       7.393    0.0227   0.02228     95997.5           0
-#    3      14.650   0.02282   0.02295      191765           0
-#    3      29.087   0.02307   0.02331      382278           0
-#    3      58.348   0.02303   0.02299      767336           0
-#    3     116.742   0.02313   0.02323  1.53489e+06           0
-#    3     233.349   0.02309   0.02306  3.07183e+06           0
-#    3     465.474   0.02305   0.02301   6.145e+06           0
-#    3     976.009    0.0231   0.02315  1.2283e+07           0
-#    3    1993.849   0.02309   0.02307  2.45718e+07           0
-#    3    2483.775   0.02309   0.02308  3.10672e+07           0
-# best constant loss: 0.0314169
-# pass     delta t   average     since     example    learning
-#                       loss      last     counter        rate
-#    4       0.778    0.0948    0.0948     1538.13     0.99999
-#    4       1.524   0.08841   0.08194     3060.34     0.99998
-#    4       3.040   0.09271   0.09721     5994.37     0.99996
-#    4       6.031   0.09015   0.08757       11973     0.99992
-#    4      12.056   0.09018   0.09022       23794     0.99984
-#    4      24.054    0.0871     0.084     47501.1     0.99968
-#    4      47.977   0.08409   0.08114     95997.5     0.99936
-#    4      95.989   0.08336   0.08262      191765    0.998721
-#    4     191.762   0.08325   0.08314      382278    0.997443
-#    4     383.131   0.08263   0.08202      767336    0.994893
-#    4     765.929   0.08225   0.08187  1.53489e+06    0.989812
-#    4    1532.589   0.08161   0.08098  3.07183e+06    0.979728
-#    4    3069.534   0.07886   0.07611   6.145e+06    0.959867
-#    4    6158.580   0.07279    0.0667  1.2283e+07    0.921345
-#    4   12261.654   0.06638   0.05998  2.45718e+07    0.848877
-#    4   15471.016   0.06455   0.05761  3.10672e+07    0.812889
-# best constant loss: 0.0821423
+#    4       0.797   0.08059   0.08059     1538.13           1
+#    4       1.599   0.07292   0.06518     3060.34    0.995037
+#    4       3.212   0.07501   0.07719     5994.37    0.985329
+#    4       6.410   0.07162   0.06822       11973    0.966736
+#    4      12.888   0.07029   0.06895       23794    0.932505
+#    4      25.836   0.06801   0.06572     47501.1    0.873704
+#    4      51.564   0.06625   0.06453     95997.5     0.78326
+#    4     103.531   0.06607   0.06588      191765    0.663723
+#    4     207.801   0.06613   0.06619      382278    0.530745
+#    4     417.014   0.06576   0.06539      767336    0.404557
+#    4     834.298    0.0656   0.06544  1.53489e+06    0.298408
+#    4    1649.537   0.06545    0.0653  3.07183e+06    0.215816
+#    4    3236.426   0.06525   0.06505   6.145e+06    0.154395
+#    4    6344.000   0.06516   0.06507  1.2283e+07    0.109824
+#    4   12561.081   0.06494   0.06473  2.45718e+07     0.07789
+#    4   15879.892   0.06488   0.06462  3.10672e+07   0.0693125
+# best constant loss: 0.0654702
