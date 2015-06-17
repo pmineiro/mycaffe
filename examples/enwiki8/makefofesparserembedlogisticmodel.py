@@ -5,14 +5,15 @@ import math
 from math import sqrt
 import h5py
 import numpy as np
+import os
 import sys
 import time
 import warnings
 from scipy.sparse import csr_matrix
 
-alpha=0.9
-eta=10.0
-etadecay=0.9998
+alpha=0.5
+eta=1.0
+etadecay=0.9999
 weightdecay=1e-5
 
 # UGH ... so much for DRY
@@ -22,13 +23,15 @@ lrs[('ip3',0)]=0.75
 lrs[('ip3',1)]=1
 
 np.random.seed(8675309)
+sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0)
+sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 h5f=h5py.File(sys.argv[1])
 embedding=np.array(h5f['embedding'])
 h5f.close()
 
 vocabsize=80000
-batchsize=6000 
+batchsize=1500 
 
 windowsize=int(embedding.shape[0]/(vocabsize+2))
 rawembeddingsize=int(embedding.shape[1]/windowsize)
