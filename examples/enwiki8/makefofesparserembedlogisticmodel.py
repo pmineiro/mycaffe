@@ -44,11 +44,11 @@ pretrain=caffe.Net(sys.argv[2],sys.argv[3])
 pretrain.set_phase_test()
 
 net=caffe.Net(sys.argv[4])
-#net.set_mode_gpu()
+net.set_mode_gpu()
 net.set_phase_train()
 
 momnet = caffe.Net(sys.argv[4])
-#momnet.set_mode_gpu()
+momnet.set_mode_gpu()
 momnet.set_phase_train()
 
 for (layer,momlayer) in zip(net.layers,momnet.layers):

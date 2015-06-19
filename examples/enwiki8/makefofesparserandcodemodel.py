@@ -15,14 +15,14 @@ from scipy.sparse import csr_matrix
 #np.seterr(all='warn') 
 
 onemalpha=1.0
-alphadecay=0.999
-maxalpha=0.4
-etastart=1
-etadecay=0.9995
+alphadecay=0.9998
+maxalpha=0.9
+etastart=1.0
+etadecay=0.9998
 weightdecay=1e-7
 labelnoise=0.001
-scalefac=10
-maxpasses=1
+scalefac=100
+maxpasses=2
 
 vocabsize=80000
 windowsize=2
@@ -73,11 +73,11 @@ preembed[:]=np.random.standard_normal(size=(invocabsize,embeddingsize))
 embedding=np.linalg.qr(preembed)[0]
 
 net = caffe.Net(sys.argv[1])
-net.set_mode_cpu()
+net.set_mode_gpu()
 net.set_phase_train()
 
 momnet = caffe.Net(sys.argv[1])
-momnet.set_mode_cpu()
+momnet.set_mode_gpu()
 momnet.set_phase_train()
 
 for (layer,momlayer) in zip(net.layers,momnet.layers):
@@ -186,7 +186,7 @@ for passnum in range(maxpasses):
         for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
           blobnum=0
           for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-            layereta=lrs[(name,blobnum)]
+            layereta=lrs[(name,blobnum)]*eta
             momblob.data[:]=min(1-onemalpha,maxalpha)*momblob.data[:]+layereta*blob.diff
             blob.data[:]-=momblob.data[:]
             blob.data[:]=(1-weightdecay*layereta)*blob.data[:]
@@ -227,21 +227,23 @@ os.link(sys.argv[5]+"_e."+str(maxpasses-1),sys.argv[5]+"_e")
 # import to matlab:
 # >> Z=h5read('fofesparsemodel9_e','/embedding');
 # 
-# GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserandcodemodel.py fofe_sparse_rembed_small_unigram_train fofebaserates9.txt `cat numlinesfofengram9 | perl -lane 'print int(0.25*$F[0])'` fofengram9.txt fofesparserembedmodel9
-# 
+# GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserandcodemodel.py fofe_sparse_rembed_small_unigram_train fofebaserates9.txt `cat numlinesfofengram9 | perl -lane 'print int(0.9*$F[0])'` fofengram9.txt fofesparserembedmodel9
 # pass   delta t   average     since      best       example       eta     alpha
 #                     loss      last     const       counter
-#    0     1.821     207.9     207.9       217       12523.7         1         0
-#    0     3.537     207.8     207.6       217       25054.1    0.9995     0.001
-#    0     7.046     207.6     207.5     217.2       50157.9    0.9985  0.002997
-#    0    14.084     207.5     207.4     217.2        100512    0.9965  0.006979
-#    0    28.076     207.3     207.2     217.2        200850    0.9925    0.0149
-#    0    56.253     207.1     206.8     217.2        401328    0.9846   0.03054
-#    0   111.567     206.7     206.3     217.2        803407     0.969   0.06109
-#    0   222.221     205.9     205.2     217.2   1.60687e+06    0.9385    0.1193
-#    0   443.273     203.8     201.6     217.2   3.21339e+06    0.8803    0.2252
-#    0   884.181     198.5     193.2     217.2   6.42599e+06    0.7745       0.4
-#    0  1765.189     193.6     188.8     217.2   1.28519e+07    0.5995       0.4
-#    0  3533.009       190     186.4     217.2   2.57059e+07    0.3592       0.4
-#    0  4273.186     189.2     185.6     217.5   3.10667e+07      0.29       0.4
-
+#    0     1.894     207.9     207.9     217.2       12518.8         1         0
+#    0     3.790     207.9     207.9     217.2       24988.2    0.9998    0.0002
+#    0     7.589     207.9     207.8     217.2       50058.7    0.9994  0.0005999
+#    0    15.355     207.8     207.8     217.2        100597    0.9986  0.001399
+#    0    30.700     207.8     207.8     217.2        200909     0.997  0.002996
+#    0    60.419     207.7     207.6     217.2        401070    0.9938  0.006181
+#    0   124.020     207.6     207.4     217.2        803470    0.9875   0.01252
+#    0   248.254     207.3     207.1     217.2   1.60706e+06    0.9749   0.02508
+#    0   495.202     206.3     205.2     217.2   3.21338e+06    0.9503   0.04973
+#    0  1001.482     203.1     199.9     217.2   6.42582e+06    0.9028   0.09716
+#    0  1953.190     199.2     195.4     217.2   1.28505e+07     0.815     0.185
+#    0  3853.460     196.3     193.3     217.2   2.57034e+07     0.664     0.336
+#    0  7915.598     194.4     192.4     217.2   5.14136e+07    0.4408    0.5592
+#    0  17477.220     193.1     191.8     217.2   1.02832e+08    0.1943    0.8057
+#    0  18926.280     192.9     191.5     217.3   1.11857e+08    0.1682    0.8318
+#    1  32323.000     192.1     191.2     217.2   2.05662e+08   0.03774       0.9
+#    1  34753.106       192     190.8     217.3   2.23727e+08    0.0283       0.9
