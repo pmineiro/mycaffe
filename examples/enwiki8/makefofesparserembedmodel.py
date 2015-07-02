@@ -11,32 +11,36 @@ import time
 import warnings
 from scipy.sparse import csr_matrix
 
-alpha=0.8
-etastart=1.0 
-initialt=100.0
-powert=1.0
+onemalphastart=1.0
+onemalphadecay=0.995
+maxalpha=0.9
+etastart=1e-3
+etadecay=1.0
 weightdecay=1e-5
+epsilon=1e-12
 
 # TODO: oversampling and final SVD
 
 # UGH ... so much for DRY
 
 lrs=dict()
-lrs['embedding']=0.01
-lrs[('ip1',0)]=0.01
-lrs[('ip1',1)]=0.5  
-lrs[('ip2',0)]=0.01
-lrs[('ip2',1)]=0.5 
-lrs[('ip3',0)]=0.75
+lrs['embedding']=1
+lrs[('ip1',0)]=1
+lrs[('ip1',1)]=1
+lrs[('ip2',0)]=1
+lrs[('ip2',1)]=1
+lrs[('ip3',0)]=1
 lrs[('ip3',1)]=1
 
 np.random.seed(8675309)
+sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0)
+sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 vocabsize=80000
 windowsize=2
 rawembeddingsize=200
-batchsize=6000 
-labelembeddingsize=200
+batchsize=8000
+labelembeddingsize=400
 
 embeddingsize=windowsize*rawembeddingsize
 invocabsize=windowsize*(vocabsize+2)
@@ -54,7 +58,7 @@ with open(sys.argv[2], 'r') as f:
 
 baserates=baserates/np.sum(baserates)
 
-scalefac=10000
+scalefac=1
 expectedimportance=baserates.dot(np.divide(sqrt(scalefac*baserates[0]),np.sqrt(baserates[0]+(scalefac-1)*baserates)))
 
 maxlinenum=int(sys.argv[3])
@@ -71,22 +75,28 @@ for passnum in range(maxpasses):
     embedding=np.linalg.qr(preembed)[0]
 
     net = caffe.Net(sys.argv[1])
-    net.set_mode_cpu()
+    net.set_mode_gpu()
     net.set_phase_train()
 
     momnet = caffe.Net(sys.argv[1])
-    momnet.set_mode_cpu()
+    momnet.set_mode_gpu()
     momnet.set_phase_train()
 
-    for (layer,momlayer) in zip(net.layers,momnet.layers):
-      for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
+    gradnet = caffe.Net(sys.argv[1])
+    gradnet.set_mode_gpu()
+    gradnet.set_phase_train()
+
+    for (layer,momlayer,gradlayer) in zip(net.layers,momnet.layers,gradnet.layers):
+      for (blob,momblob,gradblob) in zip(layer.blobs,momlayer.blobs,gradlayer.blobs):
         if blob.data.shape[2] > 1:
           blob.data[:]=np.transpose(np.linalg.qr(np.random.standard_normal(size=(blob.data.shape[3],blob.data.shape[2])))[0])
         else:
           blob.data[:]=0
         momblob.data[:]=np.zeros(blob.data.shape,dtype='f')
+        gradblob.data[:]=np.zeros(blob.data.shape,dtype='f')
 
     momembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
+    gradembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
 
   row=[]
   col=[]
@@ -104,15 +114,16 @@ for passnum in range(maxpasses):
   nextprint=1
   embedsum=np.zeros(labelembeddingsize,dtype='d')
   embedsumsq=np.zeros(labelembeddingsize,dtype='d')
-  lastloss=0;
 
   if orthopass:
     eta=0
+    onemalpha=0
   else:
     eta=etastart
+    onemalpha=onemalphastart
 
-  print "%4s  %10s  %8s  %8s  %10s  %10s"%("pass","delta t","average","since","example","learning")
-  print "%4s  %10s  %8s  %8s  %10s  %10s"%("","","loss","last","counter","rate")
+  print "%4s  %10s  %8s  %8s  %10s  %8s  %8s"%("pass","delta t","average","since","example","eta","alpha")
+  print "%4s  %10s  %8s  %8s  %10s  %8s  %8s"%("","","loss","last","counter","","")
 
   with open(sys.argv[4], 'r') as f:
     linenum=0
@@ -123,8 +134,8 @@ for passnum in range(maxpasses):
   
       yx=[word for word in line.split(' ')]
       labels[bindex]=int(yx[0])-2
-      labelvalues[bindex]=1
-      importance[bindex]=(1.0/expectedimportance)*sqrt(scalefac*baserates[0])/sqrt(baserates[0]+(scalefac-1)*baserates[int(yx[0])-2])
+      labelvalues[bindex]=sqrt(scalefac*baserates[0])/sqrt(baserates[0]+(scalefac-1)*baserates[int(yx[0])-2])
+      importance[bindex]=1
   
       for word in yx[1:]:
         iv=[subword for subword in word.split(':')]
@@ -156,20 +167,12 @@ for passnum in range(maxpasses):
         sumimp+=np.sum(importance)
         sumsinceimp+=np.sum(importance)
 
-        if thisloss < lastloss:
-          eta=(50.0/49.0)*eta
-        else:
-          eta=(49.0/50.0)*eta
-
-        lastloss=thisloss;
-
         if orthopass:
           yembedhat+=np.transpose(sl).dot(np.multiply(res['ip3'].reshape((batchsize,labelembeddingsize)),importance[:, np.newaxis]))
         else:
-          myeta=eta*pow(initialt/(initialt+numupdates),powert);
-          xticx=np.sum(np.square(res['ip3']),axis=1).reshape(batchsize)
-          impaware=-np.divide(np.expm1(-myeta*np.multiply(importance,xticx)),xticx)
-          net.blobs['ip3'].diff[:]=(1.0/batchsize)*np.multiply(ip3diff,impaware[:, np.newaxis, np.newaxis, np.newaxis])
+          myeta=eta
+          myalpha=min(maxalpha,1.0-onemalpha)
+          net.blobs['ip3'].diff[:]=(1.0/batchsize)*np.multiply(ip3diff,importance[:, np.newaxis, np.newaxis, np.newaxis])
           net.backward()
           data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
   
@@ -182,18 +185,20 @@ for passnum in range(maxpasses):
           # df/dW    = (df/dy)*x'
   
           sdtransdiff=sd.transpose().tocsr().dot(data_diff)
+          gradembeddiff+=np.abs(sdtransdiff)
 
-          momembeddiff=alpha*momembeddiff+lrs['embedding']*sdtransdiff
-          embedding=embedding-momembeddiff
+          momembeddiff=myalpha*momembeddiff+lrs['embedding']*myeta*sdtransdiff
+          embedding=embedding-np.divide(momembeddiff,epsilon+gradembeddiff)
           embedding=(1-lrs['embedding']*weightdecay*myeta)*embedding
-  
-          for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
+
+          for (name,layer,momlayer,gradlayer) in zip(net._layer_names,net.layers,momnet.layers,gradnet.layers):
             blobnum=0
-            for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-              layereta=lrs[(name,blobnum)]
-              momblob.data[:]=alpha*momblob.data[:]+layereta*blob.diff
-              blob.data[:]-=momblob.data[:]
-              blob.data[:]=(1-weightdecay*layereta)*blob.data[:]
+            for (blob,momblob,gradblob) in zip(layer.blobs,momlayer.blobs,gradlayer.blobs):
+              layereta=lrs[(name,blobnum)]*myeta
+              momblob.data[:]=myalpha*momblob.data+layereta*blob.diff
+              gradblob.data[:]+=np.abs(blob.diff)
+              blob.data[:]-=np.divide(momblob.data,epsilon+gradblob.data)
+              blob.data[:]*=(1-weightdecay*myeta)
               blobnum=blobnum+1
   
         value=[]
@@ -201,19 +206,20 @@ for passnum in range(maxpasses):
         col=[]
         labels[:]=0
         bindex=0
+        eta=eta*etadecay
+        onemalpha=onemalpha*onemalphadecay
         numupdates=numupdates+1
         if numupdates >= nextprint:
             now=time.time()
-            print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %10.6g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,myeta)
+            print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %8.5g  %8.5g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,myeta,myalpha)
+            print "best constant loss: %g"%(np.sum(embedsumsq/sumimp-np.square(embedsum/sumimp)))
             nextprint=2*nextprint
             sumsinceimp=0
             sumsinceloss=0
 
   now=time.time()
-  print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %10.6g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,myeta)
-  embedsum*=1.0/sumimp
-  embedsumsq*=1.0/sumimp
-  print "best constant loss: %g"%(np.sum(embedsumsq-np.square(embedsum)))
+  print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %8.5g  %8.5g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,myeta,myalpha)
+  print "best constant loss: %g"%(np.sum(embedsumsq/sumimp-np.square(embedsum/sumimp)))
 
   if orthopass:
     labelembedding=np.linalg.qr(yembedhat)[0].astype(dtype='f')
@@ -231,6 +237,7 @@ for passnum in range(maxpasses):
     h5f.create_dataset('labelembedding',data=labelembedding)
     h5f.close()
     del momnet
+    del gradnet
 
 os.link(sys.argv[5]+"."+str(maxpasses-1),sys.argv[5])
 os.link(sys.argv[5]+"_e."+str(maxpasses-1),sys.argv[5]+"_e")

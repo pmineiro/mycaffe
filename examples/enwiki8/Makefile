@@ -41,7 +41,7 @@ fofesparsemodel%: fofe_sparse_small_unigram_train numlinesfofengram% fofengram%.
 
 fofesparserembedmodel%: fofe_sparse_rembed_small_unigram_train fofebaserates%.txt numlinesfofengram% fofengram%.txt 
 	@rm -f $(wildcard fofesparserembedmodel$* fofesparserembedmodel$*_e fofesparserembedmodel$*.* fofesparserembedmodel$*_e.*)
-	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserandcodemodel.py $(word 1,$^) $(word 2,$^) `cat $(word 3,$^) | perl -lane 'print int(0.9*$$F[0])'` $(word 4,$^) $@
+	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparserembedmodel.py $(word 1,$^) $(word 2,$^) `cat $(word 3,$^) | perl -lane 'print int(0.9*$$F[0])'` $(word 4,$^) $@
 
 sparserembedmodelclean%:
 	@rm -f $(wildcard fofesparserembedmodel$**)

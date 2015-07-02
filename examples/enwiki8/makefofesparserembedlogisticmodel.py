@@ -11,10 +11,13 @@ import time
 import warnings
 from scipy.sparse import csr_matrix
 
-alpha=0.5
+onemalpha=0.5
+onemalphadecay=0.9992
+maxalpha=0.92
 eta=1.0
-etadecay=0.9999
-weightdecay=1e-5
+etadecay=1.0
+weightdecay=0
+epsilon=1e-12
 
 # UGH ... so much for DRY
 
@@ -51,10 +54,15 @@ momnet = caffe.Net(sys.argv[4])
 momnet.set_mode_gpu()
 momnet.set_phase_train()
 
-for (layer,momlayer) in zip(net.layers,momnet.layers):
-  for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
+gradnet = caffe.Net(sys.argv[4])
+gradnet.set_mode_gpu()
+gradnet.set_phase_train()
+
+for (layer,momlayer,gradlayer) in zip(net.layers,momnet.layers,gradnet.layers):
+  for (blob,momblob,gradblob) in zip(layer.blobs,momlayer.blobs,gradlayer.blobs):
     blob.data[:]=0.01*np.random.standard_normal(size=blob.data.shape)
     momblob.data[:]=np.zeros(blob.data.shape,dtype='f')
+    gradblob.data[:]=np.zeros(blob.data.shape,dtype='f')
 
 maxlinenum=int(sys.argv[5])
 
@@ -72,8 +80,8 @@ nextprint=1
 
 for passnum in range(2):
   with open(sys.argv[6],'r') as f:
-    print "%10s\t%10s\t%10s\t%11s\t%11s"%("delta t","average","since","example","learning")
-    print "%10s\t%10s\t%10s\t%11s\t%11s"%("","loss","last","counter","rate")
+    print "%4s  %10s  %8s  %8s  %10s  %8s  %8s"%("pass","delta t","average","since","example","eta","alpha")
+    print "%4s  %10s  %8s  %8s  %10s  %8s  %8s"%("","","loss","last","counter","","")
     
     linenum=0
     for line in f:
@@ -103,27 +111,32 @@ for passnum in range(2):
         sumsinceloss+=res['loss'][0,0,0,0]
         net.backward()
   
-        for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
+        for (name,layer,momlayer,gradlayer) in zip(net._layer_names,net.layers,momnet.layers,gradnet.layers):
           blobnum=0
-          for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
+          for (blob,momblob,gradblob) in zip(layer.blobs,momlayer.blobs,gradlayer.blobs):
             myeta=lrs[(name,blobnum)]*eta
-            momblob.data[:]=alpha*momblob.data[:]+myeta*blob.diff
-            blob.data[:]-=momblob.data[:]
-            blob.data[:]=(1-weightdecay*myeta)*blob.data[:]
+            myalpha=min(maxalpha,1.0-onemalpha)
+            momblob.data[:]*=myalpha
+            momblob.data[:]+=myeta*blob.diff
+            gradblob.data[:]+=np.abs(blob.diff)
+            blob.data[:]-=np.divide(momblob.data,epsilon+gradblob.data)
+            if weightdecay > 0:
+              blob.data[:]*=(1-myeta*weightdecay)
             blobnum=blobnum+1
     
-        eta=eta*etadecay
         value=[]
         row=[]
         col=[]
         labels[:]=0
         bindex=0
+        eta=eta*etadecay
+        onemalpha=onemalpha*onemalphadecay
         numupdates=numupdates+1
         numsinceupdates=numsinceupdates+1
         if numupdates >= nextprint:
           net.save(sys.argv[7]+"."+str(numupdates))
           now=time.time()
-          print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
+          print "%4u  %10.3f  %8.4g  %8.4g  %10u  %8.5g  %8.5g"%(passnum,now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,myeta,myalpha)
           nextprint=2*nextprint
           numsinceupdates=0
           sumsinceloss=0
@@ -134,19 +147,21 @@ net.save(sys.argv[7])
 
 # import to matlab:
 # >> Z=h5read('fofesparsemodel9_e','/embedding');
-
-#   delta t         average           since          example        learning
-#                      loss            last          counter            rate
-#     7.381         11.2894         11.2894             1500           9.998
-#    14.362         11.2342         11.1789             3000           9.996
-#    28.023         11.0291         10.8240             6000           9.992
-#    55.038         10.4174          9.8057            12000         9.98401
-#   108.869          9.6095          8.8017            24000         9.96805
-#   216.483          8.8316          8.0536            48000          9.9362
-#   428.370          8.1538          7.4761            96000          9.8728
-#   853.607          7.5786          7.0034           192000         9.74722
-#  1702.521          7.1346          6.6906           384000         9.50084
-#  3394.884          6.8252          6.5159           768000         9.02659
-#  6783.919          6.6008          6.3763          1536000         8.14794
-# 13569.806          6.4500          6.2991          3072000         6.63889
-# 27156.923          6.3499          6.2499          6144000         4.40748
+# 
+# pass     delta t   average     since     example       eta     alpha           
+#                       loss      last     counter                               
+#    0       2.776     11.29     11.29        1500         1       0.5           
+#    0       5.077      10.5     9.703        3000         1    0.5004           
+#    0       9.280     9.379     8.262        6000         1    0.5012           
+#    0      17.162     8.216     7.053       12000         1   0.50279           
+#    0      32.563     7.331     6.445       24000         1   0.50597           
+#    0      62.762      6.79      6.25       48000         1   0.51225           
+#    0     122.253     6.471     6.151       96000         1   0.52459           
+#    0     241.044     6.225      5.98      192000         1   0.54832           
+#    0     480.436      6.05     5.874      384000         1    0.5923           
+#    0     953.586     5.942     5.835      768000         1   0.66783           
+#    0    1895.403     5.849     5.756     1536000         1    0.7795           
+#    0    3772.254     5.767     5.686     3072000         1   0.90284           
+#    0    7519.724     5.681     5.594     6144000         1      0.92           
+#    0   15031.059     5.598     5.516    12288000         1      0.92           
+#    0   30059.116     5.531     5.465    24576000         1      0.92           
