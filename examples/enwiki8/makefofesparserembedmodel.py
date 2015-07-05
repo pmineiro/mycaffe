@@ -14,7 +14,7 @@ from scipy.sparse import csr_matrix
 onemalphastart=0.5
 onemalphadecay=0.995
 maxalpha=0.95
-etastart=1e-3
+etastart=2e-3
 etadecay=1.0
 weightdecay=1e-6
 epsilon=1e-12
@@ -39,7 +39,7 @@ sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 vocabsize=80000
 windowsize=2
 rawembeddingsize=200
-batchsize=81799
+batchsize=104729
 labelembeddingsize=400
 
 embeddingsize=windowsize*rawembeddingsize
@@ -58,7 +58,7 @@ with open(sys.argv[2], 'r') as f:
 
 baserates=baserates/np.sum(baserates)
 
-scalefac=10
+scalefac=100
 expectedimportance=baserates.dot(np.divide(sqrt(scalefac*baserates[0]),np.sqrt(baserates[0]+(scalefac-1)*baserates)))
 
 maxlinenum=int(sys.argv[3])
@@ -118,104 +118,107 @@ for passnum in range(maxpasses):
   if orthopass:
     eta=0
     onemalpha=0
+    innerpass=1
   else:
     eta=etastart
     onemalpha=onemalphastart
+    innerpass=2
 
   print "%4s  %10s  %8s  %8s  %10s  %8s  %8s"%("pass","delta t","average","since","example","eta","alpha")
   print "%4s  %10s  %8s  %8s  %10s  %8s  %8s"%("","","loss","last","counter","","")
 
-  with open(sys.argv[4], 'r') as f:
-    linenum=0
-    for line in f:
-      linenum=linenum+1
-      if linenum > maxlinenum:
-        break
-  
-      yx=[word for word in line.split(' ')]
-      labels[bindex]=int(yx[0])-2
-      labelvalues[bindex]=sqrt(scalefac*baserates[0])/sqrt(baserates[0]+(scalefac-1)*baserates[int(yx[0])-2])
-      importance[bindex]=1
-  
-      for word in yx[1:]:
-        iv=[subword for subword in word.split(':')]
-        row.append(bindex)
-        col.append(int(iv[0])-1)
-        value.append(float(iv[1]))
-      
-      bindex=bindex+1
-  
-      if bindex >= batchsize:
-        sd=csr_matrix((value, (row, col)),                    		\
-                      shape=(batchsize,invocabsize),          		\
-                      dtype='f')
-        data=sd.dot(embedding).reshape(batchsize,1,1,embeddingsize)
-        sl=csr_matrix((labelvalues,                                   	\
-                      (np.linspace(0,batchsize-1,batchsize),          	\
-                       labels)),                                      	\
-                       shape=(batchsize,outvocabsize),                	\
-                       dtype='f')
-        projlabels=sl.dot(labelembedding)
-        embedsum+=importance.dot(projlabels)
-        embedsumsq+=importance.dot(np.square(projlabels))
-        net.set_input_arrays(data,labels)
-        res=net.forward()
-        ip3diff=res['ip3']-projlabels.reshape(batchsize,labelembeddingsize,1,1)
-        thisloss=importance.dot(np.sum(np.square(ip3diff),axis=1).reshape(batchsize))
-        sumloss+=thisloss
-        sumsinceloss+=thisloss
-        sumimp+=np.sum(importance)
-        sumsinceimp+=np.sum(importance)
+  for innerpassnum in range(innerpass):
+    with open(sys.argv[4], 'r') as f:
+      linenum=0
+      for line in f:
+        linenum=linenum+1
+        if linenum > maxlinenum:
+          break
+    
+        yx=[word for word in line.split(' ')]
+        labels[bindex]=int(yx[0])-2
+        labelvalues[bindex]=sqrt(scalefac*baserates[0])/sqrt(baserates[0]+(scalefac-1)*baserates[int(yx[0])-2])
+        importance[bindex]=1
+    
+        for word in yx[1:]:
+          iv=[subword for subword in word.split(':')]
+          row.append(bindex)
+          col.append(int(iv[0])-1)
+          value.append(float(iv[1]))
+        
+        bindex=bindex+1
+    
+        if bindex >= batchsize:
+          sd=csr_matrix((value, (row, col)),                    		\
+                        shape=(batchsize,invocabsize),          		\
+                        dtype='f')
+          data=sd.dot(embedding).reshape(batchsize,1,1,embeddingsize)
+          sl=csr_matrix((labelvalues,                                   	\
+                        (np.linspace(0,batchsize-1,batchsize),          	\
+                         labels)),                                      	\
+                         shape=(batchsize,outvocabsize),                	\
+                         dtype='f')
+          projlabels=sl.dot(labelembedding)
+          embedsum+=importance.dot(projlabels)
+          embedsumsq+=importance.dot(np.square(projlabels))
+          net.set_input_arrays(data,labels)
+          res=net.forward()
+          ip3diff=res['ip3']-projlabels.reshape(batchsize,labelembeddingsize,1,1)
+          thisloss=importance.dot(np.sum(np.square(ip3diff),axis=1).reshape(batchsize))
+          sumloss+=thisloss
+          sumsinceloss+=thisloss
+          sumimp+=np.sum(importance)
+          sumsinceimp+=np.sum(importance)
 
-        if orthopass:
-          yembedhat+=np.transpose(sl).dot(np.multiply(res['ip3'].reshape((batchsize,labelembeddingsize)),importance[:, np.newaxis]))
-        else:
-          myeta=eta
-          myalpha=min(maxalpha,1.0-onemalpha)
-          net.blobs['ip3'].diff[:]=(1.0/batchsize)*np.multiply(ip3diff,importance[:, np.newaxis, np.newaxis, np.newaxis])
-          net.backward()
-          data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
-  
-          # y = W x
-          # y_k = \sum_l W_kl x_l
-          # df/dW_ij = \sum_k df/dy_k dy_k/dW_ij
-          #          = \sum_k df/dy_k (\sum_l 1_{i=k} 1_{j=l} x_l)
-          #          = \sum_k df/dy_k 1_{i=k} x_j
-          #          = df/dy_i x_j
-          # df/dW    = (df/dy)*x'
-  
-          sdtransdiff=sd.transpose().tocsr().dot(data_diff)
-          gradembeddiff+=np.abs(sdtransdiff)
+          if orthopass:
+            yembedhat+=np.transpose(sl).dot(np.multiply(res['ip3'].reshape((batchsize,labelembeddingsize)),importance[:, np.newaxis]))
+          else:
+            myeta=eta
+            myalpha=min(maxalpha,1.0-onemalpha)
+            net.blobs['ip3'].diff[:]=(1.0/batchsize)*np.multiply(ip3diff,importance[:, np.newaxis, np.newaxis, np.newaxis])
+            net.backward()
+            data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
+    
+            # y = W x
+            # y_k = \sum_l W_kl x_l
+            # df/dW_ij = \sum_k df/dy_k dy_k/dW_ij
+            #          = \sum_k df/dy_k (\sum_l 1_{i=k} 1_{j=l} x_l)
+            #          = \sum_k df/dy_k 1_{i=k} x_j
+            #          = df/dy_i x_j
+            # df/dW    = (df/dy)*x'
+    
+            sdtransdiff=sd.transpose().tocsr().dot(data_diff)
+            gradembeddiff+=np.abs(sdtransdiff)
 
-          momembeddiff=myalpha*momembeddiff+lrs['embedding']*myeta*sdtransdiff
-          embedding=embedding-np.divide(momembeddiff,epsilon+gradembeddiff)
-          embedding=(1-lrs['embedding']*weightdecay*myeta)*embedding
+            momembeddiff=myalpha*momembeddiff+lrs['embedding']*myeta*sdtransdiff
+            embedding=embedding-np.divide(momembeddiff,epsilon+gradembeddiff)
+            embedding=(1-lrs['embedding']*weightdecay*myeta)*embedding
 
-          for (name,layer,momlayer,gradlayer) in zip(net._layer_names,net.layers,momnet.layers,gradnet.layers):
-            blobnum=0
-            for (blob,momblob,gradblob) in zip(layer.blobs,momlayer.blobs,gradlayer.blobs):
-              layereta=lrs[(name,blobnum)]*myeta
-              momblob.data[:]=myalpha*momblob.data+layereta*blob.diff
-              gradblob.data[:]+=np.abs(blob.diff)
-              blob.data[:]-=np.divide(momblob.data,epsilon+gradblob.data)
-              blob.data[:]*=(1-weightdecay*myeta)
-              blobnum=blobnum+1
-  
-        value=[]
-        row=[]
-        col=[]
-        labels[:]=0
-        bindex=0
-        eta=eta*etadecay
-        onemalpha=onemalpha*onemalphadecay
-        numupdates=numupdates+1
-        if numupdates >= nextprint:
-            now=time.time()
-            print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %8.5g  %8.4g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,myeta,myalpha)
-            print "best constant loss: %g"%(np.sum(embedsumsq/sumimp-np.square(embedsum/sumimp)))
-            nextprint=2*nextprint
-            sumsinceimp=0
-            sumsinceloss=0
+            for (name,layer,momlayer,gradlayer) in zip(net._layer_names,net.layers,momnet.layers,gradnet.layers):
+              blobnum=0
+              for (blob,momblob,gradblob) in zip(layer.blobs,momlayer.blobs,gradlayer.blobs):
+                layereta=lrs[(name,blobnum)]*myeta
+                momblob.data[:]=myalpha*momblob.data+layereta*blob.diff
+                gradblob.data[:]+=np.abs(blob.diff)
+                blob.data[:]-=np.divide(momblob.data,epsilon+gradblob.data)
+                blob.data[:]*=(1-weightdecay*myeta)
+                blobnum=blobnum+1
+    
+          value=[]
+          row=[]
+          col=[]
+          labels[:]=0
+          bindex=0
+          eta=eta*etadecay
+          onemalpha=onemalpha*onemalphadecay
+          numupdates=numupdates+1
+          if numupdates >= nextprint:
+              now=time.time()
+              print "%2u %1u  %10.3f  %8.4g  %8.4g  %10.6g  %8.5g  %8.4g"%(passnum,innerpassnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,myeta,myalpha)
+              print "best constant loss: %g"%(np.sum(embedsumsq/sumimp-np.square(embedsum/sumimp)))
+              nextprint=2*nextprint
+              sumsinceimp=0
+              sumsinceloss=0
 
   now=time.time()
   print "%4u  %10.3f  %8.4g  %8.4g  %10.6g  %8.5g  %8.4g"%(passnum,now-start,sumloss/sumimp,sumsinceloss/sumsinceimp,sumimp,myeta,myalpha)
