@@ -1,5 +1,6 @@
 enwik?.zip
 *.hdf5
+*.gz
 histo?
 fofengram?.txt
 fofebaserates?.txt

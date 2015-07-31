@@ -3,6 +3,7 @@
 import caffe
 import math
 from math import sqrt
+import gzip
 import h5py
 import numpy as np
 import os
@@ -79,7 +80,7 @@ sumsinceloss=0
 nextprint=1
 
 for passnum in range(2):
-  with open(sys.argv[6],'r') as f:
+  with gzip.open(sys.argv[6],'r') as f:
     print "%4s  %10s  %8s  %8s  %10s  %8s  %8s"%("pass","delta t","average","since","example","eta","alpha")
     print "%4s  %10s  %8s  %8s  %10s  %8s  %8s"%("","","loss","last","counter","","")
     

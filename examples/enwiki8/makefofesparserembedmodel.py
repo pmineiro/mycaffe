@@ -3,6 +3,7 @@
 import caffe
 import math
 from math import sqrt, pow
+import gzip
 import h5py
 import numpy as np
 import os
@@ -128,7 +129,7 @@ for passnum in range(maxpasses):
   print "%4s  %10s  %8s  %8s  %10s  %8s  %8s"%("","","loss","last","counter","","")
 
   for innerpassnum in range(innerpass):
-    with open(sys.argv[4], 'r') as f:
+    with gzip.open(sys.argv[4], 'r') as f:
       linenum=0
       for line in f:
         linenum=linenum+1
