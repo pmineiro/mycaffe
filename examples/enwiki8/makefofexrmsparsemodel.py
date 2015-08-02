@@ -65,7 +65,9 @@ momembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
 #        countword=[word for word in line.split(' ')]
 #        prior[min(pindex,outvocabsize-1)]+=int(' '.join(countword[:-1]))
 #        pindex=pindex+1
+#
 #prior=np.log(prior.astype('f'))
+#
 #net.params['ip3'][1].data[:]=prior
 
 f=open(sys.argv[2],'r')
@@ -80,13 +82,15 @@ numsinceupdates=0
 numupdates=0
 sumloss=0
 sumsinceloss=0
+sumsigma=0
+sumsincesigma=0
 nextprint=1
 
 sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 
-print "%10s\t%10s\t%10s\t%11s\t%11s"%("delta t","average","since","example","learning")
-print "%10s\t%10s\t%10s\t%11s\t%11s"%("","loss","last","counter","rate")
+print "%10s\t%7s\t%7s\t%7s\t%7s\t%11s\t%11s"%("delta t","average","since","average","since","example","learning")
+print "%10s\t%7s\t%7s\t%7s\t%7s\t%11s\t%11s"%("","loss","last","sigma","last","counter","rate")
 
 for line in f:
     yx=[word for word in line.split(' ')]
@@ -102,8 +106,8 @@ for line in f:
 
     if bindex >= batchsize:
         try:
-          assert(np.min(labels) >= 0);
-          assert(np.max(labels) < outvocabsize);
+          assert(np.min(labels) >= 0)
+          assert(np.max(labels) < outvocabsize)
         except:
           pdb.set_trace()
 
@@ -113,6 +117,12 @@ for line in f:
         res=net.forward()
         sumloss+=res['loss'][0,0,0,0]
         sumsinceloss+=res['loss'][0,0,0,0]
+        meanloss=res['loss'][0,0,0,0]
+        meansquareloss=res['losssquared'][0,0,0,0]
+        sigma=math.sqrt(meansquareloss-meanloss*meanloss)
+        sumsigma+=sigma
+        sumsincesigma+=sigma
+        net.blobs['lossdetail'].data[:]=np.maximum(np.minimum(1+0.2*np.divide(net.blobs['lossdetail'].data - meanloss, sigma), 3), 0)
         net.backward()
         data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
 
@@ -153,21 +163,22 @@ for line in f:
             h5f.create_dataset('embedding',data=embedding)
             h5f.close()
             now=time.time()
-            print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
+            print "%10.3f\t%7.4f\t%7.4f\t%7.4f\t%7.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,sumsigma/numupdates,sumsincesigma/numsinceupdates,numupdates*batchsize,eta)
             nextprint=2*nextprint
             numsinceupdates=0
             sumsinceloss=0
+            sumsincesigma=0
 
 
 now=time.time()
-print "%10.3f\t%10.4f\t%10.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,numupdates*batchsize,eta)
+print "%10.3f\t%7.4f\t%7.4f\t%7.4f\t%7.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,sumsigma/numupdates,sumsincesigma/numsinceupdates,numupdates*batchsize,eta)
 net.save(sys.argv[4])
 h5f=h5py.File(sys.argv[4]+"_e")
 h5f.create_dataset('embedding',data=embedding)
 h5f.close()
 
 # import to matlab:
-# >> Z=h5read('fofesparsemodel9_e','/embedding');
+# >> Z=h5read('fofesparsemodel9_e','/embedding')
 
 # GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py fofe_sparse_small_unigram_train <(head -n `wc -l fofengram9.txt | perl -lane 'print int(0.9*$F[0])'` fofengram9.txt) fofesparsemodel9
 #   delta t         average           since          example        learning
