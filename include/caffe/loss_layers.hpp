@@ -764,7 +764,7 @@ class SoftmaxWithLossLayer : public LossLayer<Dtype> {
 };
 
 template <typename Dtype>
-class SoftmaxWithLossSquaredLayer : public LossLayer<Dtype> {
+class SoftmaxWithLossDetailLayer : public LossLayer<Dtype> {
  private:
   LayerParameter strip_loss_weights (const LayerParameter& param)
     {
@@ -773,7 +773,7 @@ class SoftmaxWithLossSquaredLayer : public LossLayer<Dtype> {
       return myparam;
     }
  public:
-  explicit SoftmaxWithLossSquaredLayer(const LayerParameter& param)
+  explicit SoftmaxWithLossDetailLayer(const LayerParameter& param)
       : LossLayer<Dtype>(param),
         softmax_layer_(new SoftmaxLayer<Dtype>(strip_loss_weights (param))) {}
   virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
@@ -782,7 +782,7 @@ class SoftmaxWithLossSquaredLayer : public LossLayer<Dtype> {
       vector<Blob<Dtype>*>* top);
 
   virtual inline LayerParameter_LayerType type() const {
-    return LayerParameter_LayerType_SOFTMAX_LOSS_WITH_SQUARED;
+    return LayerParameter_LayerType_SOFTMAX_LOSS_WITH_DETAIL;
   }
   virtual inline int ExactNumBottomBlobs() const { return -1; }
   virtual inline int MinBottomBlobs() const { return 2; }
@@ -792,7 +792,7 @@ class SoftmaxWithLossSquaredLayer : public LossLayer<Dtype> {
   virtual inline int MaxTopBlobs() const { return 3; }
 
  protected:
-  /// @copydoc SoftmaxWithLossSquaredLayer
+  /// @copydoc SoftmaxWithLossDetailLayer
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       vector<Blob<Dtype>*>* top);
   virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
