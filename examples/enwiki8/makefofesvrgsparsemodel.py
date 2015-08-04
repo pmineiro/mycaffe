@@ -26,12 +26,12 @@ lrs[('ip1',1)]=1
 lrs[('ip2',0)]=1
 lrs[('ip2',1)]=1
 lrs[('ip3',0)]=1
-lrs[('ip3',1)]=0
+lrs[('ip3',1)]=0.001
 
 vocabsize=80000
 windowsize=2
 rawembeddingsize=200
-batchsize=250 
+batchsize=1000
 switchfac=1.1
 
 embeddingsize=windowsize*rawembeddingsize
@@ -45,24 +45,24 @@ oldembedding=embedding
 del preembed
 
 net = caffe.Net(sys.argv[1])
-net.set_mode_gpu()
+net.set_mode_cpu()
 net.set_phase_train()
 
 oldnet = caffe.Net(sys.argv[1])
-oldnet.set_mode_gpu()
+oldnet.set_mode_cpu()
 oldnet.set_phase_train()
 
 batchnet = caffe.Net(sys.argv[1])
-batchnet.set_mode_gpu()
+batchnet.set_mode_cpu()
 batchnet.set_phase_train()
+
+batchdata_diff=np.zeros(embeddingsize,dtype='f')
 
 for (layer,oldlayer,batchlayer) in zip(net.layers,oldnet.layers,batchnet.layers):
   for (blob,oldblob,batchblob) in zip(layer.blobs,oldlayer.blobs,batchlayer.blobs):
     blob.data[:]=0.01*np.random.standard_normal(size=blob.data.shape)
     oldblob.data[:]=blob.data
     batchblob.data[:]=0
-
-batchembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
 
 with open(sys.argv[4],'r') as priorfile:
     prior=np.zeros(outvocabsize,dtype='d')
@@ -92,9 +92,9 @@ numupdates=0
 sumloss=0
 sumsinceloss=0
 nextprint=1
-nextswitch=1000
+nextswitch=1
 phase=Phase.sgd
-phasesize=1
+phasesize=5 
 
 sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
@@ -133,7 +133,6 @@ with open(sys.argv[3],'rb') as f:
         res=oldnet.forward()
         oldnet.backward()
         olddata_diff=oldnet.blobs['data'].diff.reshape(batchsize,embeddingsize)
-        oldsdtransdiff=sd.transpose().tocsr().dot(olddata_diff)
 
         if phase == Phase.sgd:
             sumloss+=res['loss'][0,0,0,0]
@@ -144,6 +143,8 @@ with open(sys.argv[3],'rb') as f:
               assert(not math.isnan(sumsinceloss))
             except:
               pdb.set_trace()
+
+            oldsdtransdiff=sd.transpose().tocsr().dot(olddata_diff)
 
             myeta=lrs['embedding']*eta
             oldembedding-=myeta*oldsdtransdiff
@@ -174,27 +175,22 @@ with open(sys.argv[3],'rb') as f:
                 oldbnum=curbnum
         elif phase == Phase.batch:
             numbatch=numbatch+1
-            batchembeddiff+=oldsdtransdiff
-            batchembeddiff+=weightdecay*oldembedding
+            # TODO: mean or sum (?)
+            batchdata_diff+=np.sum(olddata_diff,axis=0,dtype='d')
 
             for (oldlayer,batchlayer) in zip(oldnet.layers,batchnet.layers):
                 for (oldblob,batchblob) in zip(oldlayer.blobs,batchlayer.blobs):
                     batchblob.data[:]+=oldblob.diff
-                    batchblob.data[:]+=weightdecay*oldblob.data
 
             if curbnum >= nextswitch or curlinenum + batchsize >= maxlinenum:
-                # always make one batch step (w=w_0, other terms cancel)
+                batchdata_diff*=1.0/numbatch
                 myeta=lrs['embedding']*eta
-                batchembeddiff*=1.0/numbatch
-                embedding-=myeta*batchembeddiff
                 for (name,layer,batchlayer) in zip(net._layer_names,
                                                    net.layers,
                                                    batchnet.layers):
                     blobnum=0
                     for (blob,batchblob) in zip(layer.blobs,batchlayer.blobs):
-                        myeta=lrs[(name,blobnum)]*eta
                         batchblob.data[:]*=1.0/numbatch
-                        blob.data[:]-=myeta*batchblob.data
                         blobnum=blobnum+1
 
                 phase=Phase.online
@@ -214,15 +210,20 @@ with open(sys.argv[3],'rb') as f:
             except:
               pdb.set_trace()
             net.backward()
+            # cheesy stabilize embedding gradient
+            # compute correlation on data_diff and then project via data
             data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
-            sdtransdiff=sd.transpose().tocsr().dot(data_diff)
+            controlvar=olddata_diff-batchdata_diff
+            cor=np.sum(np.multiply(data_diff,controlvar),dtype='d')/(np.linalg.norm(data_diff)*np.linalg.norm(controlvar))
+
+            sdtranscsr=sd.transpose().tocsr()
+            sdtransdiff=sdtranscsr.dot(data_diff)
+            controlsdtransdiff=sdtranscsr.dot(controlvar)
 
             myeta=lrs['embedding']*eta
             embedding-=myeta*sdtransdiff
             embedding-=(myeta*weightdecay)*embedding
-            embedding+=myeta*oldsdtransdiff
-            embedding+=(myeta*weightdecay)*oldembedding
-            embedding-=myeta*batchembeddiff
+            embedding+=(myeta*cor)*controlsdtransdiff
 
             for (name,layer,oldlayer,batchlayer) in zip(net._layer_names,
                                                         net.layers,
@@ -232,22 +233,19 @@ with open(sys.argv[3],'rb') as f:
                 for (blob,oldblob,batchblob) in zip(layer.blobs,
                                                     oldlayer.blobs,
                                                     batchlayer.blobs):
+                  controlvar=oldblob.diff[:]-batchblob.data[:]
+                  cor=np.sum(np.multiply(blob.diff[:],controlvar),dtype='d')/(np.linalg.norm(blob.diff[:])*np.linalg.norm(controlvar))
                   myeta=lrs[(name,blobnum)]*eta
                   blob.data[:]-=myeta*blob.diff
                   blob.data[:]-=(myeta*weightdecay)*blob.data
-                  blob.data[:]+=myeta*oldblob.diff
-                  blob.data[:]+=(myeta*weightdecay)*oldblob.data
-                  blob.data[:]-=myeta*batchblob.data
+                  blob.data[:]+=(myeta*cor)*controlvar
                   blobnum=blobnum+1
 
             numupdates=numupdates+1
             numsinceupdates=numsinceupdates+1
 
             if curbnum >= nextswitch or curlinenum + batchsize >= maxlinenum:
-#                print "end online phase (%u): emb - oldemb"%(numbatch)
-#                print np.max(np.abs(embedding-oldembedding))
-
-                batchembeddiff[:]=0
+                batchdata_diff[:]=0
                 oldembedding[:]=embedding
                 for (layer,oldlayer,batchlayer) in zip(net.layers,
                                                        oldnet.layers,
@@ -255,14 +253,11 @@ with open(sys.argv[3],'rb') as f:
                     for (blob,oldblob,batchblob) in zip(layer.blobs,
                                                         oldlayer.blobs,
                                                         batchlayer.blobs):
-#                        print "end online phase: blob - oldblob"
-#                        print np.max(np.abs(blob.data-oldblob.data))
                         batchblob.data[:]=0
                         oldblob.data[:]=blob.data
 
                 phase=Phase.batch
                 phasesize=math.ceil(switchfac*phasesize)
-                print phasesize
                 nextswitch+=phasesize
                 numbatch=0
                 oldpos=f.tell()
