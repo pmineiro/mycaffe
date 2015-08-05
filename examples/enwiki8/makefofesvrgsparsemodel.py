@@ -2,6 +2,7 @@
 
 from enum import Enum
 import caffe
+import gzip
 import math
 import h5py
 import numpy as np
@@ -16,17 +17,26 @@ np.random.seed(8675309)
 np.seterr(all='raise')
 np.seterr(under='ignore')
 
-eta=1  
+eta=1
 weightdecay=1e-5
 
 lrs=dict()
 lrs['embedding']=1
-lrs[('ip1',0)]=1
-lrs[('ip1',1)]=1
+lrs[('ip1',0)]=1.5
+lrs[('ip1',1)]=1.75
 lrs[('ip2',0)]=1
-lrs[('ip2',1)]=1
-lrs[('ip3',0)]=1
-lrs[('ip3',1)]=0.001
+lrs[('ip2',1)]=1.25
+lrs[('ip3',0)]=0.75
+lrs[('ip3',1)]=1
+
+weightdecays=dict()
+weightdecays['embedding']=1
+weightdecays[('ip1',0)]=1
+weightdecays[('ip1',1)]=1
+weightdecays[('ip2',0)]=1
+weightdecays[('ip2',1)]=1
+weightdecays[('ip3',0)]=1
+weightdecays[('ip3',1)]=1
 
 vocabsize=80000
 windowsize=2
@@ -45,37 +55,40 @@ oldembedding=embedding
 del preembed
 
 net = caffe.Net(sys.argv[1])
-net.set_mode_cpu()
+net.set_mode_gpu()
 net.set_phase_train()
 
 oldnet = caffe.Net(sys.argv[1])
-oldnet.set_mode_cpu()
+oldnet.set_mode_gpu()
 oldnet.set_phase_train()
 
 batchnet = caffe.Net(sys.argv[1])
-batchnet.set_mode_cpu()
+batchnet.set_mode_gpu()
 batchnet.set_phase_train()
 
 batchdata_diff=np.zeros(embeddingsize,dtype='f')
 
 for (layer,oldlayer,batchlayer) in zip(net.layers,oldnet.layers,batchnet.layers):
   for (blob,oldblob,batchblob) in zip(layer.blobs,oldlayer.blobs,batchlayer.blobs):
-    blob.data[:]=0.01*np.random.standard_normal(size=blob.data.shape)
+    preblob=np.zeros(shape=(blob.data.shape[2],blob.data.shape[3]),dtype='f')
+    preblob[:]=np.random.standard_normal(size=preblob.shape)
+    blob.data[:]=np.linalg.qr(preblob)[0]
     oldblob.data[:]=blob.data
     batchblob.data[:]=0
 
-with open(sys.argv[4],'r') as priorfile:
-    prior=np.zeros(outvocabsize,dtype='d')
-    pindex=0
-    for line in priorfile:
-        countword=[word for word in line.split(' ')]
-        prior[pindex]=math.log(float(' '.join(countword[:-1])))
-        pindex=pindex+1
-        if pindex >= outvocabsize:
-            break
-
-net.params['ip3'][1].data[:]=prior
-oldnet.params['ip3'][1].data[:]=prior
+#lrs[('ip3',1)]=0.001
+#with open(sys.argv[4],'r') as priorfile:
+#    prior=np.zeros(outvocabsize,dtype='d')
+#    pindex=0
+#    for line in priorfile:
+#        countword=[word for word in line.split(' ')]
+#        prior[pindex]=math.log(float(' '.join(countword[:-1])))
+#        pindex=pindex+1
+#        if pindex >= outvocabsize:
+#            break
+#
+#net.params['ip3'][1].data[:]=prior
+#oldnet.params['ip3'][1].data[:]=prior
 
 Phase=Enum('Phase','batch online sgd')
 
@@ -94,7 +107,7 @@ sumsinceloss=0
 nextprint=1
 nextswitch=1
 phase=Phase.sgd
-phasesize=5 
+phasesize=5
 
 sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
@@ -104,7 +117,7 @@ print "%10s\t%10s\t%10s\t%11s\t%14s"%("","loss","last","counter","")
 
 maxlinenum=int(sys.argv[2])
 
-with open(sys.argv[3],'rb') as f:
+with gzip.open(sys.argv[3],'rb') as f:
   oldbnum=0
   oldlinenum=0
   oldpos=f.tell()
@@ -121,7 +134,7 @@ with open(sys.argv[3],'rb') as f:
         row.append(bindex)
         col.append(int(iv[0])-1)
         value.append(float(iv[1]))
-    
+
     bindex=bindex+1
 
     if bindex >= batchsize:
@@ -138,7 +151,7 @@ with open(sys.argv[3],'rb') as f:
             sumloss+=res['loss'][0,0,0,0]
             sumsinceloss+=res['loss'][0,0,0,0]
             try:
-              assert(res['loss'][0,0,0,0] < 12)
+              #assert(res['loss'][0,0,0,0] < 12)
               assert(not math.isnan(sumloss))
               assert(not math.isnan(sumsinceloss))
             except:
@@ -148,14 +161,16 @@ with open(sys.argv[3],'rb') as f:
 
             myeta=lrs['embedding']*eta
             oldembedding-=myeta*oldsdtransdiff
-            oldembedding-=(weightdecay*myeta)*oldembedding
+            myweightdecay=weightdecays['embedding']*weightdecay
+            oldembedding-=(myeta*myweightdecay)*oldembedding
 
             for (name,oldlayer) in zip(oldnet._layer_names,oldnet.layers):
               blobnum=0
               for oldblob in oldlayer.blobs:
                 myeta=lrs[(name,blobnum)]*eta
+                myweightdecay=weightdecays[(name,blobnum)]*weightdecay
                 oldblob.data[:]-=myeta*oldblob.diff
-                oldblob.data[:]-=(weightdecay*myeta)*oldblob.data
+                oldblob.data[:]-=(myeta*myweightdecay)*oldblob.data
                 blobnum=blobnum+1
 
             numupdates=numupdates+1
@@ -204,7 +219,7 @@ with open(sys.argv[3],'rb') as f:
             sumloss+=res['loss'][0,0,0,0]
             sumsinceloss+=res['loss'][0,0,0,0]
             try:
-              assert(res['loss'][0,0,0,0] < 12)
+              #assert(res['loss'][0,0,0,0] < 12)
               assert(not math.isnan(sumloss))
               assert(not math.isnan(sumsinceloss))
             except:
@@ -214,7 +229,12 @@ with open(sys.argv[3],'rb') as f:
             # compute correlation on data_diff and then project via data
             data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
             controlvar=olddata_diff-batchdata_diff
-            cor=np.sum(np.multiply(data_diff,controlvar),dtype='d')/(np.linalg.norm(data_diff)*np.linalg.norm(controlvar))
+            # NB: np.linalg.norm does not take dtype argument ...
+            cordenom=math.sqrt(np.sum(np.square(data_diff.flat),dtype='d'))*math.sqrt(np.sum(np.square(controlvar),dtype='d'))
+            if cordenom > 0:
+              cor=np.sum(np.multiply(data_diff,controlvar),dtype='d')/cordenom
+            else:
+              cor=0
 
             sdtranscsr=sd.transpose().tocsr()
             sdtransdiff=sdtranscsr.dot(data_diff)
@@ -222,8 +242,10 @@ with open(sys.argv[3],'rb') as f:
 
             myeta=lrs['embedding']*eta
             embedding-=myeta*sdtransdiff
-            embedding-=(myeta*weightdecay)*embedding
-            embedding+=(myeta*cor)*controlsdtransdiff
+            myweightdecay=weightdecays['embedding']*weightdecay
+            embedding-=(myeta*myweightdecay)*embedding
+            if cor > 0:
+              embedding+=(myeta*cor)*controlsdtransdiff
 
             for (name,layer,oldlayer,batchlayer) in zip(net._layer_names,
                                                         net.layers,
@@ -234,11 +256,18 @@ with open(sys.argv[3],'rb') as f:
                                                     oldlayer.blobs,
                                                     batchlayer.blobs):
                   controlvar=oldblob.diff[:]-batchblob.data[:]
-                  cor=np.sum(np.multiply(blob.diff[:],controlvar),dtype='d')/(np.linalg.norm(blob.diff[:])*np.linalg.norm(controlvar))
+                  # NB: np.linalg.norm does not take dtype argument ...
+                  cordenom=math.sqrt(np.sum(np.square(blob.diff.flat),dtype='d'))*math.sqrt(np.sum(np.square(controlvar),dtype='d'))
+                  if cordenom > 0:
+                    cor=np.sum(np.multiply(blob.diff[:],controlvar),dtype='d')/cordenom
+                  else:
+                    cor=0
                   myeta=lrs[(name,blobnum)]*eta
                   blob.data[:]-=myeta*blob.diff
-                  blob.data[:]-=(myeta*weightdecay)*blob.data
-                  blob.data[:]+=(myeta*cor)*controlvar
+                  myweightdecay=weightdecays[(name,blobnum)]*weightdecay
+                  blob.data[:]-=(myeta*myweightdecay)*blob.data
+                  if cor > 0:
+                    blob.data[:]+=(myeta*cor)*controlvar
                   blobnum=blobnum+1
 
             numupdates=numupdates+1
@@ -281,12 +310,8 @@ with open(sys.argv[3],'rb') as f:
             numsinceupdates=0
             sumsinceloss=0
 
-if phase == Phase.batch:
-  now=time.time()
-  print "%10.3f\t(ended during batch phase)"%(now-start)
-else:
-  now=time.time()
-  print "%10.3f\t%10.4f\t%10.4f\t%11u\t%14s"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,curbnum*batchsize,str(phase))
+now=time.time()
+print "%10.3f\t%10.4f\t%10.4f\t%11u\t%14s"%(now-start,sumloss/numupdates,sumsinceloss/(numsinceupdates+1e-16),curbnum*batchsize,str(phase))
 
 net.save(sys.argv[5])
 h5f=h5py.File(sys.argv[5]+"_e")
