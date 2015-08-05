@@ -17,7 +17,7 @@ np.random.seed(8675309)
 np.seterr(all='raise')
 np.seterr(under='ignore')
 
-eta=1
+eta=0.2
 weightdecay=1e-5
 
 lrs=dict()
@@ -42,7 +42,7 @@ vocabsize=80000
 windowsize=2
 rawembeddingsize=200
 batchsize=1000
-switchfac=1.1
+switchfac=1.05
 
 embeddingsize=windowsize*rawembeddingsize
 invocabsize=windowsize*(vocabsize+2)
@@ -76,7 +76,7 @@ for (layer,oldlayer,batchlayer) in zip(net.layers,oldnet.layers,batchnet.layers)
     oldblob.data[:]=blob.data
     batchblob.data[:]=0
 
-#lrs[('ip3',1)]=0.001
+#lrs[('ip3',1)]=0.0001
 #with open(sys.argv[4],'r') as priorfile:
 #    prior=np.zeros(outvocabsize,dtype='d')
 #    pindex=0
@@ -107,13 +107,13 @@ sumsinceloss=0
 nextprint=1
 nextswitch=1
 phase=Phase.sgd
-phasesize=5
+phasesize=1
 
 sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 
-print "%10s\t%10s\t%10s\t%11s\t%14s"%("delta t","average","since","example","phase")
-print "%10s\t%10s\t%10s\t%11s\t%14s"%("","loss","last","counter","")
+print "%9s   %8s   %8s   %9s   %7s   %7s"%("delta","average","since","example","phase","phase")
+print "%9s   %8s   %8s   %9s   %7s   %7s"%("t","loss","last","counter","size","")
 
 maxlinenum=int(sys.argv[2])
 
@@ -190,6 +190,7 @@ with gzip.open(sys.argv[3],'rb') as f:
                 oldbnum=curbnum
         elif phase == Phase.batch:
             numbatch=numbatch+1
+            # NB: batch-ing layer diff rather than parameter diff ...
             # TODO: mean or sum (?)
             batchdata_diff+=np.sum(olddata_diff,axis=0,dtype='d')
 
@@ -286,8 +287,8 @@ with gzip.open(sys.argv[3],'rb') as f:
                         oldblob.data[:]=blob.data
 
                 phase=Phase.batch
-                phasesize=math.ceil(switchfac*phasesize)
-                nextswitch+=phasesize
+                phasesize=switchfac*phasesize
+                nextswitch+=math.floor(phasesize)
                 numbatch=0
                 oldpos=f.tell()
                 oldlinenum=curlinenum
@@ -305,13 +306,13 @@ with gzip.open(sys.argv[3],'rb') as f:
             h5f.create_dataset('embedding',data=embedding)
             h5f.close()
             now=time.time()
-            print "%10.3f\t%10.4f\t%10.4f\t%11u\t%14s"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,curbnum*batchsize,str(phase))
+            print "%9.2f   %8.4f   %8.4f   %9u   %7u   %7s"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,curbnum*batchsize,phasesize,str(phase)[6:])
             nextprint*=2
             numsinceupdates=0
             sumsinceloss=0
 
 now=time.time()
-print "%10.3f\t%10.4f\t%10.4f\t%11u\t%14s"%(now-start,sumloss/numupdates,sumsinceloss/(numsinceupdates+1e-16),curbnum*batchsize,str(phase))
+print "%9.2f   %8.4f   %8.4f   %9u   %7u   %7s"%(now-start,sumloss/numupdates,sumsinceloss/(numsinceupdates+1e-16),curbnum*batchsize,phasesize,str(phase)[6:])
 
 net.save(sys.argv[5])
 h5f=h5py.File(sys.argv[5]+"_e")
