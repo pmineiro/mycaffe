@@ -8,7 +8,8 @@ import numpy as np
 import os
 import sys
 import time
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, dia_matrix
+from numpy.linalg import lstsq, solve
 import pdb
 
 np.random.seed(8675309)
@@ -58,7 +59,7 @@ for (layer,momlayer) in zip(net.layers,momnet.layers):
 
 momembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
 
-#lrs[('ip3',1)]=0
+#lrs[('ip3',1)]=0.001
 #with open(sys.argv[4],'r') as priorfile:
 #    prior=np.zeros(outvocabsize,dtype='i')
 #    pindex=0
@@ -130,20 +131,66 @@ for line in f:
         #          = df/dy_i x_j
         # df/dW    = (df/dy)*x'
 
+
         sdtransdiff=sd.transpose().tocsr().dot(data_diff)
+	#sdticsd=np.array(csr_matrix.sum(sd.multiply(sd),axis=0)) # diag approx
+	#sdtransdiff=math.sqrt(sd.shape[0])*np.divide(sdtransdiff,1e-16+sdticsd.transpose())
+	#sdtransdiff=math.sqrt(batchsize)*np.divide(sdtransdiff,1e-16+sdticsd.transpose())
 
         momembeddiff=alpha*momembeddiff+lrs['embedding']*eta*sdtransdiff
         embedding=embedding-momembeddiff
         embedding=(1-lrs['embedding']*weightdecay*eta)*embedding
 
+        net.blobs['data'].data[:]+=sd.dot(momembeddiff)[:,np.newaxis,np.newaxis,:]
+
+	bottom=dict()
+	bottom['ip1']='data'
+	bottom['ip2']='ip1'
+	# TODO: super-slow
+	bottom['ip3']='ip2'
+
         for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
-          blobnum=0
-          for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-            myeta=lrs[(name,blobnum)]*eta
-            momblob.data[:]=alpha*momblob.data[:]+myeta*blob.diff
-            blob.data[:]-=momblob.data[:]
-            blob.data[:]=(1-weightdecay*myeta)*blob.data[:]
-            blobnum=blobnum+1
+	  if name in bottom:
+            myeta=eta
+	    x=np.hstack( ( np.squeeze(net.blobs[bottom[name]].data),
+	                   np.ones((batchsize,1),dtype='f') ) )
+	    xticy=x.transpose().dot(np.squeeze(net.blobs[name].diff))
+            #xticy=np.hstack( (np.squeeze(layer.blobs[0].diff),
+            #                  np.squeeze(layer.blobs[1].diff)[:,np.newaxis] ) ).transpose()
+            W=xticy
+            
+#	    xticx=x.transpose().dot(x)
+#	    datatrace=np.trace(xticx)
+#	    xticx+=1e-1*(datatrace/xticx.shape[0])*np.identity(xticx.shape[0])
+#	    W=solve(xticx,xticy)
+
+	    momlayer.blobs[0].data[:]=(alpha*momlayer.blobs[0].data
+	                               +myeta*W[:-1,:].transpose())
+	    momlayer.blobs[1].data[:]=(alpha*momlayer.blobs[1].data
+	                               +myeta*W[-1,:])
+	    layer.blobs[0].data[:]-=momlayer.blobs[0].data
+	    layer.blobs[0].data[:]-=weightdecay*myeta*layer.blobs[0].data
+	    layer.blobs[1].data[:]-=momlayer.blobs[1].data
+	    layer.blobs[1].data[:]-=weightdecay*myeta*layer.blobs[1].data
+
+            dW=np.squeeze(np.concatenate((np.squeeze(momlayer.blobs[0].data).transpose(),
+					  np.squeeze(momlayer.blobs[1].data)[np.newaxis,:]),
+					 axis=0))
+#	    #net.blobs[name].data[:]+=x.dot(dW)[:,:,np.newaxis,np.newaxis]
+	    net.blobs[name].data[:]+=np.multiply(
+                                       np.greater(net.blobs[name].data,0),
+                                       x.dot(dW)[:,:,np.newaxis,np.newaxis])
+            net.blobs[name].data[:]=np.multiply(
+                                      np.greater(net.blobs[name].data,0),
+                                      net.blobs[name].data)
+	  else:
+            blobnum=0
+            for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
+              myeta=lrs[(name,blobnum)]*eta
+  	      momblob.data[:]=alpha*momblob.data[:]+myeta*blob.diff
+              blob.data[:]-=momblob.data[:]
+              blob.data[:]=(1-weightdecay*myeta)*blob.data[:]
+              blobnum=blobnum+1
 
         eta=eta*etadecay
         value=[]
@@ -174,25 +221,19 @@ h5f.close()
 
 # import to matlab:
 # >> Z=h5read('fofesparsemodel9_e','/embedding');
-
-# GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py fofe_sparse_small_unigram_train <(head -n `wc -l fofengram9.txt | perl -lane 'print int(0.9*$F[0])'` fofengram9.txt) fofesparsemodel9
+#
+#GLOG_minloglevel=5 PYTHONPATH=../../python python makefofepresparsemodel.py fofe_sparse_small_unigram_train `cat numlinesfofengram9 | perl -lane 'print int(0.9*$F[0])'` fofengram9.txt.gz histo9 fofepresparsemodel9
 #   delta t         average           since          example        learning
 #                      loss            last          counter            rate
-#     3.391         11.2876         11.2876             1500         0.99999
-#     6.602         11.2819         11.2763             3000         0.99998
-#    12.017         11.2611         11.2402             6000         0.99996
-#    22.099         11.1815         11.1020            12000         0.99992
-#    41.438         10.7707         10.3599            24000         0.99984
-#    79.505          9.9729          9.1751            48000         0.99968
-#   153.743          9.0664          8.1598            96000         0.99936
-#   302.458          8.2335          7.4007           192000        0.998721
-#   605.781          7.4495          6.6654           384000        0.997443
-#  1210.441          6.8001          6.1508           768000        0.994893
-#  2674.033          6.3219          5.8437          1536000        0.989812
-#  6428.634          5.9713          5.6208          3072000        0.979728
-# 14542.736          5.6994          5.4274          6144000        0.959867
-# 31955.343          5.4741          5.2488         12288000        0.921345
-# 66486.645          5.2782          5.0823         24576000        0.848877
-#136850.597          5.0992          4.9203         49152000        0.720592
-#278274.539          4.9281          4.7570         98304000        0.519253
-#318105.013          4.8964          4.6667        111871500        0.474348
+#     6.998         11.2876         11.2876             1500         0.99999
+#    13.794         11.2819         11.2762             3000         0.99998
+#    26.830         11.2611         11.2402             6000         0.99996
+#    51.337         11.1823         11.1035            12000         0.99992
+#   100.520         10.8143         10.4464            24000         0.99984
+#   199.769          9.9396          9.0649            48000         0.99968
+#   390.774          8.9433          7.9470            96000         0.99936
+#   750.326          8.0424          7.1415           192000        0.998721
+#  1449.740          7.3005          6.5586           384000        0.997443
+#  2791.183          6.7054          6.1103           768000        0.994893
+#  6317.486          6.2612          5.8170          1536000        0.989812
+#  ...

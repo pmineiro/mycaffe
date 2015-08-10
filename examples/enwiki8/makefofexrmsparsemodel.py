@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 
 import caffe
+import gzip
 import math
 import h5py
 import numpy as np
@@ -59,7 +60,7 @@ for (layer,momlayer) in zip(net.layers,momnet.layers):
 momembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
 
 #lrs[('ip3',1)]=0
-#with open(sys.argv[3],'r') as priorfile:
+#with open(sys.argv[4],'r') as priorfile:
 #    prior=np.zeros(outvocabsize,dtype='i')
 #    pindex=0
 #    for line in priorfile:
@@ -71,7 +72,8 @@ momembeddiff=np.zeros(shape=(invocabsize,embeddingsize),dtype='f')
 #
 #net.params['ip3'][1].data[:]=prior
 
-f=open(sys.argv[2],'r')
+maxlines=int(sys.argv[2])
+f=gzip.open(sys.argv[3],'rb')
 
 row=[]
 col=[]
@@ -93,7 +95,11 @@ sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 print "%10s\t%7s\t%7s\t%7s\t%7s\t%11s\t%11s"%("delta t","average","since","average","since","example","learning")
 print "%10s\t%7s\t%7s\t%7s\t%7s\t%11s\t%11s"%("","loss","last","sigma","last","counter","rate")
 
+lineno=0
 for line in f:
+    lineno=lineno+1
+    if lineno >= maxlines:
+        break
     yx=[word for word in line.split(' ')]
     labels[bindex]=int(yx[0])-2
 
@@ -159,8 +165,8 @@ for line in f:
         numupdates=numupdates+1
         numsinceupdates=numsinceupdates+1
         if numupdates >= nextprint:
-            net.save(sys.argv[4]+"."+str(numupdates))
-            h5f=h5py.File(sys.argv[4]+"_e."+str(numupdates))
+            net.save(sys.argv[5]+"."+str(numupdates))
+            h5f=h5py.File(sys.argv[5]+"_e."+str(numupdates))
             h5f.create_dataset('embedding',data=embedding)
             h5f.close()
             now=time.time()
@@ -173,8 +179,8 @@ for line in f:
 
 now=time.time()
 print "%10.3f\t%7.4f\t%7.4f\t%7.4f\t%7.4f\t%11u\t%11.6g"%(now-start,sumloss/numupdates,sumsinceloss/numsinceupdates,sumsigma/numupdates,sumsincesigma/numsinceupdates,numupdates*batchsize,eta)
-net.save(sys.argv[4])
-h5f=h5py.File(sys.argv[4]+"_e")
+net.save(sys.argv[5])
+h5f=h5py.File(sys.argv[5]+"_e")
 h5f.create_dataset('embedding',data=embedding)
 h5f.close()
 

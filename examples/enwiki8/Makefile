@@ -39,9 +39,13 @@ fofesparsesvrgmodel%: fofe_sparse_svrg_small_unigram_train numlinesfofengram% fo
 	@rm -f $(wildcard fofesparsesvrgmodel$*.* fofesparsesvrgmodel$*_e.*)
 	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesvrgsparsemodel.py $(word 1,$^) `cat $(word 2,$^) | perl -lane 'print int(0.9*$$F[0])'` $(word 3,$^) $(word 4,$^) $@
 
-fofesparsemodel%: fofe_sparse_small_unigram_train numlinesfofengram% fofengram%.txt histo%
+fofesparsemodel%: fofe_sparse_small_unigram_train numlinesfofengram% fofengram%.txt.gz histo%
 	@rm -f $(wildcard fofesparsemodel$*.* fofesparsemodel$*_e.*)
-	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py $(word 1,$^) <(head -n `cat $(word 2,$^) | perl -lane 'print int(0.9*$$F[0])'` $(word 3,$^)) $(word 4,$^) $@
+	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofesparsemodel.py $(word 1,$^) `cat $(word 2,$^) | perl -lane 'print int(0.9*$$F[0])'` $(word 3,$^) $(word 4,$^) $@
+
+fofepresparsemodel%: fofe_sparse_small_unigram_train numlinesfofengram% fofengram%.txt.gz histo%
+	@rm -f $(wildcard fofepresparsemodel$*.* fofepresparsemodel$*_e.*)
+	GLOG_minloglevel=5 PYTHONPATH=../../python python makefofepresparsemodel.py $(word 1,$^) `cat $(word 2,$^) | perl -lane 'print int(0.9*$$F[0])'` $(word 3,$^) $(word 4,$^) $@
 
 fofexrmsparsemodel%: fofe_xrm_sparse_small_unigram_train numlinesfofengram% fofengram%.txt histo%
 	@rm -f $(wildcard fofexrmsparsemodel$*.* fofexrmsparsemodel$*_e.*)
