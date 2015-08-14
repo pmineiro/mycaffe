@@ -17,7 +17,7 @@ alpha=0.9
 eta=1.0
 etadecay=0.99999
 weightdecay=1e-5
-kappa=0.25
+kappa=0
 
 # UGH ... so much for DRY
 
@@ -188,6 +188,29 @@ h5f.close()
 # >> Z=h5read('fofesparsemodel9_e','/embedding')
 
 # GLOG_minloglevel=5 PYTHONPATH=../../python python makefofexrmsparsemodel.py fofe_xrm_sparse_small_unigram_train <(head -n `cat numlinesfofengram9 | perl -lane 'print int(0.9*$F[0])'` fofengram9.txt) histo9 fofexrmsparsemodel9
+
+# kappa = 0
+#   delta t      average   since average   since     example        learning
+#                   loss    last   sigma    last     counter            rate
+#     2.437      11.2876 11.2876  0.0107  0.0107        1500         0.99999
+#     4.945      11.2819 11.2762  0.0178  0.0249        3000         0.99998
+#     9.257      11.2610 11.2402  0.0490  0.0801        6000         0.99996
+#    16.077      11.1815 11.1020  0.1699  0.2909       12000         0.99992
+#    30.085      10.7707 10.3599  0.8600  1.5501       24000         0.99984
+#    59.223       9.9729  9.1751  2.0945  3.3290       48000         0.99968
+#   108.574       9.0664  8.1598  2.9729  3.8514       96000         0.99936
+#   202.946       8.2335  7.4007  3.3921  3.8114      192000        0.998721
+#   390.500       7.4495  6.6654  3.5822  3.7723      384000        0.997443
+#   780.970       6.8001  6.1508  3.7509  3.9197      768000        0.994893
+#  1862.865       6.3219  5.8437  3.8543  3.9577     1536000        0.989812
+#  4709.038       5.9713  5.6208  3.9015  3.9486     3072000        0.979728
+# 11040.083       5.6994  5.4274  3.9093  3.9171     6144000        0.959867
+# 24946.610       5.4741  5.2488  3.8879  3.8665    12288000        0.921345
+# 52319.283       5.2782  5.0823  3.8478  3.8078    24576000        0.848877
+#107286.415       5.0992  4.9203  3.7954  3.7430    49152000        0.720592
+#219665.972       4.9281  4.7570  3.7354  3.6754    98304000        0.519253
+# ...
+
 # kappa = 0.2
 #    delta t      average   since average   since     example        learning
 #                    loss    last   sigma    last     counter            rate

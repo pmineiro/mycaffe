@@ -177,6 +177,8 @@ for line in f:
 					  np.squeeze(momlayer.blobs[1].data)[np.newaxis,:]),
 					 axis=0))
 #	    #net.blobs[name].data[:]+=x.dot(dW)[:,:,np.newaxis,np.newaxis]
+
+            # TODO: sign is wrong, WTF?
 	    net.blobs[name].data[:]+=np.multiply(
                                        np.greater(net.blobs[name].data,0),
                                        x.dot(dW)[:,:,np.newaxis,np.newaxis])
@@ -236,4 +238,7 @@ h5f.close()
 #  1449.740          7.3005          6.5586           384000        0.997443
 #  2791.183          6.7054          6.1103           768000        0.994893
 #  6317.486          6.2612          5.8170          1536000        0.989812
+# 14908.916          5.9289          5.5966          3072000        0.979728
+# 32218.623          5.6623          5.3957          6144000        0.959867
+# 66110.485          5.4349          5.2076         12288000        0.921345
 #  ...
