@@ -17,7 +17,7 @@ alpha=0.9
 eta=1.0
 etadecay=0.99999
 weightdecay=1e-5
-kappa=0
+kappa=0.25
 
 # UGH ... so much for DRY
 
@@ -129,7 +129,7 @@ for line in f:
         sigma=math.sqrt(meansquareloss-meanloss*meanloss)
         sumsigma+=sigma
         sumsincesigma+=sigma
-        net.blobs['lossdetail'].data[:]=np.maximum(np.minimum(1+kappa*np.divide(net.blobs['lossdetail'].data - meanloss, sigma), 3), 0)
+        net.blobs['lossdetail'].data[:]=1+kappa*np.divide(net.blobs['lossdetail'].data - meanloss, sigma)
         net.backward()
         data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
 
@@ -209,6 +209,7 @@ h5f.close()
 # 52319.283       5.2782  5.0823  3.8478  3.8078    24576000        0.848877
 #107286.415       5.0992  4.9203  3.7954  3.7430    49152000        0.720592
 #219665.972       4.9281  4.7570  3.7354  3.6754    98304000        0.519253
+#252354.159       4.8964  4.6667  3.7236  3.6381   111871500        0.474348
 # ...
 
 # kappa = 0.2
