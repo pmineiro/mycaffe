@@ -201,6 +201,8 @@ Layer<Dtype>* GetLayer(const LayerParameter& param) {
     return new DummyDataLayer<Dtype>(param);
   case LayerParameter_LayerType_EUCLIDEAN_LOSS:
     return new EuclideanLossLayer<Dtype>(param);
+  case LayerParameter_LayerType_EUCLIDEAN_LOSS_WITH_DETAIL:
+    return new EuclideanLossWithDetailLayer<Dtype>(param);
   case LayerParameter_LayerType_ELTWISE:
     return new EltwiseLayer<Dtype>(param);
   case LayerParameter_LayerType_FLATTEN:
@@ -211,6 +213,8 @@ Layer<Dtype>* GetLayer(const LayerParameter& param) {
     return new HDF5OutputLayer<Dtype>(param);
   case LayerParameter_LayerType_HINGE_LOSS:
     return new HingeLossLayer<Dtype>(param);
+  case LayerParameter_LayerType_GRADIENT_SCALER:
+    return new GradientScalerLayer<Dtype>(param);
   case LayerParameter_LayerType_IMAGE_DATA:
     return new ImageDataLayer<Dtype>(param);
   case LayerParameter_LayerType_IM2COL:

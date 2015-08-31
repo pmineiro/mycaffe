@@ -219,7 +219,7 @@ message LayerParameter {
   // line above the enum. Update the next available ID when you add a new
   // LayerType.
   //
-  // LayerType next available ID: 39 (last added: SOFTMAX_LOSS_WITH_DETAIL)
+  // LayerType next available ID: 42 (last added: EUCLIDEAN_LOSS_WITH_DETAIL)
   enum LayerType {
     // "NONE" layer type is 0th enum element so that we don't cause confusion
     // by defaulting to an existent LayerType (instead, should usually error if
@@ -236,8 +236,10 @@ message LayerParameter {
     DROPOUT = 6;
     DUMMY_DATA = 32;
     EUCLIDEAN_LOSS = 7;
+    EUCLIDEAN_LOSS_WITH_DETAIL = 41;
     ELTWISE = 25;
     FLATTEN = 8;
+    GRADIENT_SCALER = 40;
     HDF5_DATA = 9;
     HDF5_OUTPUT = 10;
     HINGE_LOSS = 28;

@@ -303,6 +303,80 @@ class EuclideanLossLayer : public LossLayer<Dtype> {
 };
 
 /**
+ * @brief Like Euclidean loss, but with detailed output and importance weights.
+ */
+template <typename Dtype>
+class EuclideanLossWithDetailLayer : public LossLayer<Dtype> {
+ public:
+  explicit EuclideanLossWithDetailLayer(const LayerParameter& param)
+      : LossLayer<Dtype>(param), diff_() {}
+  virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+
+  virtual inline LayerParameter_LayerType type() const {
+    return LayerParameter_LayerType_EUCLIDEAN_LOSS_WITH_DETAIL;
+  }
+
+  virtual inline int ExactNumBottomBlobs() const { return 2; }
+  virtual inline int ExactNumTopBlobs() const { return 2; }
+
+  /**
+   * Unlike most loss layers, in the EuclideanLossWithDetailLayer we can backpropagate
+   * to both inputs -- override to return true and always allow force_backward.
+   */
+  virtual inline bool AllowForceBackward(const int bottom_index) const {
+    return true;
+  }
+
+ protected:
+  /// @copydoc EuclideanLossWithDetailLayer
+  virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+
+  /**
+   * @brief Computes the Euclidean error gradient w.r.t. the inputs.
+   *
+   * Unlike other children of LossLayer, EuclideanLossWithDetailLayer \b can compute
+   * gradients with respect to the label inputs bottom[1] (but still only will
+   * if propagate_down[1] is set, due to being produced by learnable parameters
+   * or if force_backward is set). In fact, this layer is "commutative" -- the
+   * result is the same regardless of the order of the two bottoms.
+   *
+   * @param top output Blob vector (length 1), providing the error gradient with
+   *      respect to the outputs
+   *   -# @f$ (1 \times 1 \times 1 \times 1) @f$
+   *      This Blob's diff will simply contain the loss_weight* @f$ \lambda @f$,
+   *      as @f$ \lambda @f$ is the coefficient of this layer's output
+   *      @f$\ell_i@f$ in the overall Net loss
+   *      @f$ E = \lambda_i \ell_i + \mbox{other loss terms}@f$; hence
+   *      @f$ \frac{\partial E}{\partial \ell_i} = \lambda_i @f$.
+   *      (*Assuming that this top Blob is not used as a bottom (input) by any
+   *      other layer of the Net.)
+   * @param propagate_down see Layer::Backward.
+   * @param bottom input Blob vector (length 2)
+   *   -# @f$ (N \times C \times H \times W) @f$
+   *      the predictions @f$\hat{y}@f$; Backward fills their diff with
+   *      gradients @f$
+   *        \frac{\partial E}{\partial \hat{y}} =
+   *            \frac{1}{n} \sum\limits_{n=1}^N (\hat{y}_n - y_n)
+   *      @f$ if propagate_down[0]
+   *   -# @f$ (N \times C \times H \times W) @f$
+   *      the targets @f$y@f$; Backward fills their diff with gradients
+   *      @f$ \frac{\partial E}{\partial y} =
+   *          \frac{1}{n} \sum\limits_{n=1}^N (y_n - \hat{y}_n)
+   *      @f$ if propagate_down[1]
+   */
+  virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
+  virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
+
+  Blob<Dtype> diff_;
+};
+
+/**
  * @brief Computes the hinge loss for a one-of-many classification task.
  *
  * @param bottom input Blob vector (length 2)
@@ -707,9 +781,7 @@ class SoftmaxWithLossLayer : public LossLayer<Dtype> {
   virtual inline LayerParameter_LayerType type() const {
     return LayerParameter_LayerType_SOFTMAX_LOSS;
   }
-  virtual inline int ExactNumBottomBlobs() const { return -1; }
-  virtual inline int MinBottomBlobs() const { return 2; }
-  virtual inline int MaxBottomBlobs() const { return 3; }
+  virtual inline int ExactNumBottomBlobs() const { return 2; }
   virtual inline int ExactNumTopBlobs() const { return -1; }
   virtual inline int MinTopBlobs() const { return 1; }
   virtual inline int MaxTopBlobs() const { return 2; }
@@ -763,6 +835,10 @@ class SoftmaxWithLossLayer : public LossLayer<Dtype> {
   vector<Blob<Dtype>*> softmax_top_vec_;
 };
 
+/**
+ * @brief Like SoftmaxLoss, but with detailed output and importance weights.
+ */
+
 template <typename Dtype>
 class SoftmaxWithLossDetailLayer : public LossLayer<Dtype> {
  private:
@@ -784,9 +860,7 @@ class SoftmaxWithLossDetailLayer : public LossLayer<Dtype> {
   virtual inline LayerParameter_LayerType type() const {
     return LayerParameter_LayerType_SOFTMAX_LOSS_WITH_DETAIL;
   }
-  virtual inline int ExactNumBottomBlobs() const { return -1; }
-  virtual inline int MinBottomBlobs() const { return 2; }
-  virtual inline int MaxBottomBlobs() const { return 3; }
+  virtual inline int ExactNumBottomBlobs() const { return 2; }
   virtual inline int ExactNumTopBlobs() const { return -1; }
   virtual inline int MinTopBlobs() const { return 2; }
   virtual inline int MaxTopBlobs() const { return 3; }

@@ -122,14 +122,14 @@ for line in f:
         data=sd.dot(embedding).reshape(batchsize,1,1,embeddingsize)
         net.set_input_arrays(data,labels)
         res=net.forward()
-        sumloss+=res['loss'][0,0,0,0]
-        sumsinceloss+=res['loss'][0,0,0,0]
-        meanloss=res['loss'][0,0,0,0]
-        meansquareloss=res['losssquared'][0,0,0,0]
+        meanloss=np.mean(net.blobs['lossdetail'].data,dtype='d')
+        sumloss+=meanloss
+        sumsinceloss+=meanloss
+        meansquareloss=np.mean(np.square(net.blobs['lossdetail'].data),dtype='d')
         sigma=math.sqrt(meansquareloss-meanloss*meanloss)
         sumsigma+=sigma
         sumsincesigma+=sigma
-        net.blobs['lossdetail'].data[:]=1+kappa*np.divide(net.blobs['lossdetail'].data - meanloss, sigma)
+        net.blobs['lossdetail'].data[:]=1+kappa*np.divide(net.blobs['lossdetail'].data-meanloss,sigma)
         net.backward()
         data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
 

@@ -81,9 +81,7 @@ layers {
   bottom: "ip3"
   bottom: "label"
   top: "loss"
-  top: "losssquared"
   top: "lossdetail"
   loss_weight: 1
-  loss_weight: 0
   loss_weight: 0
 }

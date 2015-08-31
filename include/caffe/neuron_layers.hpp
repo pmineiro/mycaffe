@@ -213,6 +213,38 @@ class DropoutLayer : public NeuronLayer<Dtype> {
 };
 
 /**
+ * @brief Scales deltas during the backprop, using second output.
+ */
+template <typename Dtype>
+class GradientScalerLayer : public NeuronLayer<Dtype> {
+ public:
+  explicit GradientScalerLayer(const LayerParameter& param)
+      : NeuronLayer<Dtype>(param) {}
+  virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+
+  virtual inline LayerParameter_LayerType type() const {
+    return LayerParameter_LayerType_GRADIENT_SCALER;
+  }
+
+  virtual inline int ExactNumBottomBlobs() const { return 1; }
+  virtual inline int ExactNumTopBlobs() const { return 2; }
+
+ protected:
+  virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+
+  virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
+  virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
+};
+
+/**
  * @brief Computes @f$ y = (\alpha x + \beta) ^ \gamma @f$,
  *        as specified by the scale @f$ \alpha @f$, shift @f$ \beta @f$,
  *        and power @f$ \gamma @f$.

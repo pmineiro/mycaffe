@@ -12,6 +12,11 @@ template <typename Dtype>
 void SoftmaxWithLossDetailLayer<Dtype>::LayerSetUp(
     const vector<Blob<Dtype>*>& bottom, vector<Blob<Dtype>*>* top) {
   LossLayer<Dtype>::LayerSetUp(bottom, top);
+
+  // TODO: for now, assume this
+  CHECK_EQ(bottom[0]->height(), 1);
+  CHECK_EQ(bottom[0]->width(), 1);
+
   softmax_bottom_vec_.clear();
   softmax_bottom_vec_.push_back(bottom[0]);
   softmax_top_vec_.clear();
@@ -23,17 +28,14 @@ template <typename Dtype>
 void SoftmaxWithLossDetailLayer<Dtype>::Reshape(
     const vector<Blob<Dtype>*>& bottom, vector<Blob<Dtype>*>* top) {
   LossLayer<Dtype>::Reshape(bottom, top);
-  (*top)[1]->Reshape(1, 1, 1, 1);
-  // NB: bottom[0].height == bottom[0].width == 1 for inner product layer
-  // otherwise this looks really weird
-  (*top)[2]->Reshape(bottom[0]->num(),
+  (*top)[1]->Reshape(bottom[0]->num(),
                      1,
                      bottom[0]->height(),
                      bottom[0]->width());
   softmax_layer_->Reshape(softmax_bottom_vec_, &softmax_top_vec_);
-  if (top->size() >= 4) {
+  if (top->size() >= 3) {
     // softmax output
-    (*top)[3]->ReshapeLike(*bottom[0]);
+    (*top)[2]->ReshapeLike(*bottom[0]);
   }
 }
 
@@ -43,7 +45,7 @@ void SoftmaxWithLossDetailLayer<Dtype>::Forward_cpu(
   // The forward pass computes the softmax prob values.
   softmax_layer_->Forward(softmax_bottom_vec_, &softmax_top_vec_);
   const Dtype* prob_data = prob_.cpu_data();
-  Dtype* loss_data = (*top)[2]->mutable_cpu_data();
+  Dtype* loss_data = (*top)[1]->mutable_cpu_data();
   const Dtype* label = bottom[1]->cpu_data();
   int num = prob_.num();
   int dim = prob_.count() / num;
@@ -51,7 +53,6 @@ void SoftmaxWithLossDetailLayer<Dtype>::Forward_cpu(
   // NB: spatial_dim == 1 for inner product layer
   // otherwise this looks really weird
   Dtype loss = 0;
-  Dtype losssquared = 0;
   for (int i = 0; i < num; ++i) {
     for (int j = 0; j < spatial_dim; j++) {
       Dtype l = -log(std::max(prob_data[i * dim +
@@ -59,13 +60,11 @@ void SoftmaxWithLossDetailLayer<Dtype>::Forward_cpu(
                            Dtype(FLT_MIN)));
       loss_data[i * spatial_dim + j] = l;
       loss += l;
-      losssquared += l*l;
     }
   }
   (*top)[0]->mutable_cpu_data()[0] = loss / num / spatial_dim;
-  (*top)[1]->mutable_cpu_data()[0] = losssquared / num / spatial_dim;
-  if (top->size() >= 4) {
-    (*top)[3]->ShareData(prob_);
+  if (top->size() >= 3) {
+    (*top)[2]->ShareData(prob_);
   }
 }
 
@@ -82,7 +81,7 @@ void SoftmaxWithLossDetailLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>&
     const Dtype* prob_data = prob_.cpu_data();
     caffe_copy(prob_.count(), prob_data, bottom_diff);
     const Dtype* label = (*bottom)[1]->cpu_data();
-    const Dtype* loss_data = top[2]->cpu_data();
+    const Dtype* loss_data = top[1]->cpu_data();
     int num = prob_.num();
     int dim = prob_.count() / num;
     int spatial_dim = prob_.height() * prob_.width();
