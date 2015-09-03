@@ -221,5 +221,5 @@ namespace caffe {
     const_buffer_data, bottom_diff);
   }
 
-  INSTANTIATE_LAYER_GPU_FUNCS(BNLayer);
+  INSTANTIATE_CLASS(BNLayer);
 }  // namespace caffe
