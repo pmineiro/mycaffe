@@ -11,7 +11,7 @@ template <typename Dtype>
 void WeightedBatchAverageLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     vector<Blob<Dtype>*>* top) {
   const int dim = (*top)[0]->count();
-  const int num = bottom[0]->num();
+  const int num = bottom[0]->count();
   const Dtype* bottom_data0 = bottom[0]->cpu_data();
   const Dtype* bottom_data1 = bottom[1]->gpu_data();
   Dtype* top_data = (*top)[0]->mutable_gpu_data();
@@ -27,7 +27,7 @@ void WeightedBatchAverageLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& 
     const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom) {
 
   const int dim = top[0]->count();
-  const int num = (*bottom)[0]->num();
+  const int num = (*bottom)[0]->count();
   const Dtype* bottom_data0 = (*bottom)[0]->cpu_data();
   const Dtype* bottom_data1 = (*bottom)[1]->gpu_data();
   Dtype* bottom_diff0 = (*bottom)[0]->mutable_cpu_diff();
