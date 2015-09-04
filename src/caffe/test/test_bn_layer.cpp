@@ -47,8 +47,8 @@ namespace caffe {
     layer_param.mutable_bn_param()->mutable_shift_filler()->set_value(0);
 
     BNLayer<Dtype> layer(layer_param);
-    layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-    layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+    layer.SetUp(this->blob_bottom_vec_, &this->blob_top_vec_);
+    layer.Forward(this->blob_bottom_vec_, &this->blob_top_vec_);
 
     // Test mean
     int num = this->blob_bottom_->num();
@@ -83,8 +83,8 @@ namespace caffe {
     layer_param.mutable_bn_param()->mutable_scale_filler()->set_value(1);
     layer_param.mutable_bn_param()->mutable_shift_filler()->set_value(1);
     BNLayer<Dtype> layer(layer_param);
-    layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-    layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+    layer.SetUp(this->blob_bottom_vec_, &this->blob_top_vec_);
+    layer.Forward(this->blob_bottom_vec_, &this->blob_top_vec_);
 
     // Test mean
     int num = this->blob_bottom_->num();
@@ -120,8 +120,8 @@ namespace caffe {
     layer_param.mutable_bn_param()->mutable_shift_filler()->set_value(1);
 
     BNLayer<Dtype> layer(layer_param);
-    layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-    layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+    layer.SetUp(this->blob_bottom_vec_, &this->blob_top_vec_);
+    layer.Forward(this->blob_bottom_vec_, &this->blob_top_vec_);
 
     // Test mean
     int num = this->blob_bottom_->num();
@@ -159,8 +159,8 @@ namespace caffe {
 
     BNLayer<Dtype> layer(layer_param);
     GradientChecker<Dtype> checker(1e-2, 1e-4);
-    checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
-        this->blob_top_vec_);
+    checker.CheckGradientExhaustive(&layer, &this->blob_bottom_vec_,
+        &this->blob_top_vec_);
   }
   TYPED_TEST(BNLayerTest, TestGradientShiftOne) {
     typedef typename TypeParam::Dtype Dtype;
@@ -170,8 +170,8 @@ namespace caffe {
 
     BNLayer<Dtype> layer(layer_param);
     GradientChecker<Dtype> checker(1e-2, 1e-3);
-    checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
-        this->blob_top_vec_);
+    checker.CheckGradientExhaustive(&layer, &this->blob_bottom_vec_,
+        &this->blob_top_vec_);
   }
 
   TYPED_TEST(BNLayerTest, TestGradientScaleTwoShiftOne) {
@@ -182,8 +182,8 @@ namespace caffe {
 
     BNLayer<Dtype> layer(layer_param);
     GradientChecker<Dtype> checker(1e-2, 1e-3);
-    checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
-        this->blob_top_vec_);
+    checker.CheckGradientExhaustive(&layer, &this->blob_bottom_vec_,
+        &this->blob_top_vec_);
   }
 
 }  // namespace caffe

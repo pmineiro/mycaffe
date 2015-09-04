@@ -1,0 +1,268 @@
+name: "NswAdvPS"
+
+#---------------------------------------------------------
+# begin inputs: covariates and outcomes, plus dummy labels
+#---------------------------------------------------------
+
+layers {
+  name: "input"         # treated and untreated data, half and half
+  type: MEMORY_DATA
+  top: "covariates"
+  top: "_outcome_discard"
+  memory_data_param {
+    batch_size: 850     # NB: propagate any change to DUMMY_DATA
+    channels: 7
+    height: 1
+    width: 1
+  }
+}
+
+layers {
+  name: "plus_one"
+  type: DUMMY_DATA
+  top: "plus_one"
+  dummy_data_param {
+    data_filler {
+      type: "constant"
+      value: 1
+    }
+    num: 425
+    channels: 1
+    height: 1
+    width: 1
+  }
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "zero"
+  type: DUMMY_DATA
+  top: "zero"
+  dummy_data_param {
+    data_filler {
+      type: "constant"
+      value: 0
+    }
+    num: 425
+    channels: 1
+    height: 1
+    width: 1
+  }
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "slice_covariates"
+  type: SLICE
+  bottom: "covariates"
+  top: "treated_covariates"
+  top: "untreated_covariates"
+  slice_param {
+    slice_dim: 0
+  }
+
+  include: { phase: TRAIN }
+}
+
+#----------------------------------------------
+# begin scoring function
+#----------------------------------------------
+
+# TODO: add propensity score as feature
+
+layers {
+  name: "scoreip0"
+  type: INNER_PRODUCT
+  bottom: "covariates"
+  top: "scoreip0"
+  blobs_lr: 1
+  blobs_lr: 2
+  inner_product_param {
+    num_output: 80
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+
+layers {
+  name: "scorerelu0"
+  type: RELU
+  bottom: "scoreip0"
+  top: "scoreip0"
+}
+
+layers {
+  name: "scorelogit"
+  type: INNER_PRODUCT
+  bottom: "scoreip0"
+  top: "scorelogit"
+  blobs_lr: 1
+  blobs_lr: 2
+  inner_product_param {
+    num_output: 2
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+
+layers {
+  name: "score"
+  type: SOFTMAX
+  bottom: "scorelogit"
+  top: "score"
+}
+
+layers {
+  name: "treatment_labels"
+  type: CONCAT
+  bottom: "plus_one"
+  bottom: "zero"
+  top: "treatment_labels"
+  concat_param {
+    concat_dim: 0
+  }
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "treatment_loss"
+  type: SOFTMAX_LOSS
+  bottom: "scorelogit"
+  bottom: "treatment_labels"
+  top: "treatment_loss"
+}
+
+layers {
+  name: "slice_score_both"
+  type: SLICE
+  bottom: "score"
+  top: "treated_score_both"
+  top: "untreated_score_both"
+  slice_param {
+    slice_dim: 0
+  }
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "treated_score"
+  type: SLICE
+  bottom: "treated_score_both"
+  top: "_treated_score_discard"
+  top: "treated_score"
+  slice_param {
+    slice_dim: 1
+  }
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "untreated_score"
+  type: SLICE
+  bottom: "untreated_score_both"
+  top: "untreated_score"
+  top: "_untreated_score_discard"
+  slice_param {
+    slice_dim: 1
+  }
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "inverse_treated_score"
+  type: POWER
+  bottom: "treated_score"
+  top: "inverse_treated_score"
+  power_param {
+    power: -1
+    scale: 0.99999     # scale = (1.0 - shift)
+    shift: 1e-5
+  }
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "inverse_untreated_score"
+  type: POWER
+  bottom: "untreated_score"
+  top: "inverse_untreated_score"
+  power_param {
+    power: -1
+    scale: 0.99999     # scale = (1.0 - shift)
+    shift: 1e-5
+  }
+
+  include: { phase: TRAIN }
+}
+
+#----------------------------------------------
+# end scoring function
+#----------------------------------------------
+
+#----------------------------------------------
+# begin non-adversarial statistics
+#----------------------------------------------
+
+layers {
+  name: "treated_statistics"
+  type: CONCAT
+  bottom: "treated_covariates"
+  bottom: "plus_one"
+  top: "treated_statistics"
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "untreated_statistics"
+  type: CONCAT
+  bottom: "untreated_covariates"
+  bottom: "plus_one"
+  top: "untreated_statistics"
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "batchaverage_weighted_treated_statistics"
+  type: WEIGHTED_BATCH_AVERAGE
+  bottom: "inverse_treated_score"
+  bottom: "treated_statistics"
+  top: "batchaverage_weighted_treated_statistics"
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "batchaverage_weighted_untreated_statistics"
+  type: WEIGHTED_BATCH_AVERAGE
+  bottom: "inverse_untreated_score"
+  bottom: "untreated_statistics"
+  top: "batchaverage_weighted_untreated_statistics"
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "balance_loss"
+  type: EUCLIDEAN_LOSS
+  bottom: "batchaverage_weighted_treated_statistics"
+  bottom: "batchaverage_weighted_untreated_statistics"
+  top: "balance_loss"
+
+  include: { phase: TRAIN }
+}
