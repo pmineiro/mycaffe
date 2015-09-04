@@ -70,8 +70,6 @@ layers {
 # begin scoring function
 #----------------------------------------------
 
-# TODO: add propensity score as feature
-
 layers {
   name: "scoreip0"
   type: INNER_PRODUCT
@@ -80,7 +78,7 @@ layers {
   blobs_lr: 1
   blobs_lr: 2
   inner_product_param {
-    num_output: 80
+    num_output: 160
     weight_filler {
       type: "xavier"
     }
@@ -131,6 +129,7 @@ layers {
   concat_param {
     concat_dim: 0
   }
+
   include: { phase: TRAIN }
 }
 
@@ -140,6 +139,8 @@ layers {
   bottom: "scorelogit"
   bottom: "treatment_labels"
   top: "treatment_loss"
+
+  include: { phase: TRAIN }
 }
 
 layers {
@@ -218,11 +219,40 @@ layers {
 #----------------------------------------------
 
 layers {
+  name: "treated_covariates_squared"
+  type: POWER
+  bottom: "treated_covariates"
+  top: "treated_covariates_squared"
+  power_param {
+    power: 2
+    scale: 1
+    shift: 0
+  }
+
+  include: { phase: TRAIN }
+}
+
+layers {
   name: "treated_statistics"
   type: CONCAT
   bottom: "treated_covariates"
+  bottom: "treated_covariates_squared"
   bottom: "plus_one"
   top: "treated_statistics"
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "untreated_covariates_squared"
+  type: POWER
+  bottom: "untreated_covariates"
+  top: "untreated_covariates_squared"
+  power_param {
+    power: 2
+    scale: 1
+    shift: 0
+  }
 
   include: { phase: TRAIN }
 }
@@ -231,6 +261,7 @@ layers {
   name: "untreated_statistics"
   type: CONCAT
   bottom: "untreated_covariates"
+  bottom: "untreated_covariates_squared"
   bottom: "plus_one"
   top: "untreated_statistics"
 
@@ -258,10 +289,30 @@ layers {
 }
 
 layers {
+  name: "balancelambda0"
+  type: GRADIENT_SCALER
+  bottom: "batchaverage_weighted_treated_statistics"
+  top: "batchaverage_weighted_treated_statistics_gsl"
+  top: "balancelambda0"
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "balancelambda1"
+  type: GRADIENT_SCALER
+  bottom: "batchaverage_weighted_untreated_statistics"
+  top: "batchaverage_weighted_untreated_statistics_gsl"
+  top: "balancelambda1"
+
+  include: { phase: TRAIN }
+}
+
+layers {
   name: "balance_loss"
   type: EUCLIDEAN_LOSS
-  bottom: "batchaverage_weighted_treated_statistics"
-  bottom: "batchaverage_weighted_untreated_statistics"
+  bottom: "batchaverage_weighted_treated_statistics_gsl"
+  bottom: "batchaverage_weighted_untreated_statistics_gsl"
   top: "balance_loss"
 
   include: { phase: TRAIN }
