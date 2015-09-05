@@ -254,8 +254,34 @@ print "%7s %7.3f %7.3f %7.3f %7.4f %7.4f %7s %10.5g %9.3e"%(
     eta,
     maxlambda-maxminlambda)
 
-# GLOG_minloglevel=5 lambda=0.0 PYTHONPATH=../../python python makenswmodel.py nsw_train nsw_control.txt psid_controls.txt nswplacebomodel
+# "cherry picked lambda"
+#
+# GLOG_minloglevel=5 lambda=1e-3 PYTHONPATH=../../python python makenswmodel.py nsw_train nsw_control.txt psid_controls.txt nswplacebomodel
 # mean population diff: -1.64639
+# constant loss: (T) 0.326196 (U) 2.41872
+# delta t outcome outcome treated     tot     ate example   learning  gradient
+#          loss T  loss U    loss                 counter       rate     scale
+#    35ms   0.163   1.227   0.693 -1.6463 -1.6463     850  0.0099999 1.000e-08
+#    46ms   0.163   1.054   0.693 -1.6454 -1.6454      1K  0.0099998 2.000e-08
+#    64ms   0.163   1.348   0.693 -1.6451 -1.6451      3K  0.0099996 4.000e-08
+#    99ms   0.163   1.266   0.693 -1.6481 -1.6481      6K  0.0099992 8.000e-08
+#   148ms   0.163   1.323   0.693 -1.6537 -1.6537     13K  0.0099984 1.600e-07
+#   237ms   0.163   1.184   0.693 -1.6554 -1.6555     27K  0.0099968 3.200e-07
+#   419ms   0.163   1.194   0.693 -1.6472 -1.6472     54K  0.0099936 6.398e-07
+#   727ms   0.163   1.202   0.693 -1.6468 -1.6469    108K  0.0099872 1.279e-06
+#  1.335s   0.163   1.224   0.693 -1.6458 -1.6458    217K  0.0099744 2.557e-06
+#  2.613s   0.163   1.203   0.693 -1.6368 -1.6368    435K  0.0099489 5.107e-06
+#  6.091s   0.163   1.208   0.693 -1.6403 -1.6403    870K  0.0098981 1.019e-05
+# 13.764s   0.163   1.123   0.654 -0.2708 -0.8176      1M  0.0097973 2.027e-05
+# 28.292s   0.148   0.516   0.416 -0.2777 -0.6817      3M  0.0095987 4.013e-05
+# 55.728s   0.132   0.460   0.419 -0.1648 -0.6507      6M  0.0092135 7.865e-05
+#  1.762m   0.103   0.363   0.392 -0.3262 -0.5864     13M  0.0084888 1.511e-04
+#  3.284m   0.070   0.236   0.375 -0.3111 -0.5696     27M  0.0072059 2.794e-04
+#  6.234m   0.038   0.123   0.307 -0.0799 -0.0929     55M  0.0051925 4.807e-04
+# 12.024m   0.023   0.063   0.369  0.0516  0.0259    111M  0.0026962 7.304e-04
+# 17.754m   0.020   0.043   0.408  0.0516  0.0259    170M  0.0013533 8.647e-04
+
+# unfortunately, results are very sensitive to lambda
 #
 # delta t outcome outcome treated     tot     ate example   learning  gradient
 #          loss T  loss U    loss                 counter       rate     scale

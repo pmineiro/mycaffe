@@ -239,6 +239,8 @@ Layer<Dtype>* GetLayer(const LayerParameter& param) {
     return new PowerLayer<Dtype>(param);
   case LayerParameter_LayerType_RELU:
     return GetReLULayer<Dtype>(name, param);
+  case LayerParameter_LayerType_RESHAPE:
+    return new ReshapeLayer<Dtype>(param);
   case LayerParameter_LayerType_SILENCE:
     return new SilenceLayer<Dtype>(param);
   case LayerParameter_LayerType_SIGMOID:
@@ -257,8 +259,8 @@ Layer<Dtype>* GetLayer(const LayerParameter& param) {
     return new SplitLayer<Dtype>(param);
   case LayerParameter_LayerType_TANH:
     return GetTanHLayer<Dtype>(name, param);
-  case LayerParameter_LayerType_WEIGHTED_BATCH_AVERAGE:
-    return new WeightedBatchAverageLayer<Dtype>(param);
+  case LayerParameter_LayerType_WEIGHTED_BATCH_SUM:
+    return new WeightedBatchSumLayer<Dtype>(param);
   case LayerParameter_LayerType_WINDOW_DATA:
     return new WindowDataLayer<Dtype>(param);
   case LayerParameter_LayerType_NONE:

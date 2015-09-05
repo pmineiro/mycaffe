@@ -8,14 +8,14 @@
 namespace caffe {
 
 template <typename Dtype>
-void WeightedBatchAverageLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
+void WeightedBatchSumLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
       vector<Blob<Dtype>*>* top) {
   CHECK_EQ(bottom[0]->count(), bottom[1]->num());
   (*top)[0]->Reshape(1, bottom[1]->channels(), bottom[1]->height(), bottom[1]->width());
 }
 
 template <typename Dtype>
-void WeightedBatchAverageLayer<Dtype>::Forward_cpu(
+void WeightedBatchSumLayer<Dtype>::Forward_cpu(
     const vector<Blob<Dtype>*>& bottom, vector<Blob<Dtype>*>* top) {
   const int dim = (*top)[0]->count();
   const int num = bottom[0]->count();
@@ -25,12 +25,12 @@ void WeightedBatchAverageLayer<Dtype>::Forward_cpu(
 
   caffe_set(dim, Dtype(0), top_data);
   for (int i = 0; i < num; ++i) {
-    caffe_axpy(dim, bottom_data0[i] / num, bottom_data1 + i*dim, top_data);
+    caffe_axpy(dim, bottom_data0[i], bottom_data1 + i*dim, top_data);
   }
 }
 
 template <typename Dtype>
-void WeightedBatchAverageLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
+void WeightedBatchSumLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom) {
 
   const int dim = top[0]->count();
@@ -47,20 +47,20 @@ void WeightedBatchAverageLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& 
 
   for (int i = 0; i < num; ++i) {
     if (propagate_down[0]) {
-      bottom_diff0[i] = caffe_cpu_dot (dim, bottom_data1 + i*dim, top_diff) / num;
+      bottom_diff0[i] = caffe_cpu_dot (dim, bottom_data1 + i*dim, top_diff);
     }
 
     if (propagate_down[1]) {
       caffe_copy (dim, top_diff, bottom_diff1 + i*dim);
-      caffe_scal (dim, bottom_data0[i] / num, bottom_diff1 + i*dim);
+      caffe_scal (dim, bottom_data0[i], bottom_diff1 + i*dim);
     }
   }
 }
 
 #ifdef CPU_ONLY
-STUB_GPU(WeightedBatchAverageLayer);
+STUB_GPU(WeightedBatchSumLayer);
 #endif
 
-INSTANTIATE_CLASS(WeightedBatchAverageLayer);
+INSTANTIATE_CLASS(WeightedBatchSumLayer);
 
 }  // namespace caffe

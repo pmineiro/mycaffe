@@ -11,20 +11,20 @@ import pdb
 np.random.seed(8675309)
 
 alpha=0.9
-eta=1e-3
+eta=float(os.environ['eta'])
 etadecay=0.999992
 weightdecay=1e-7
 maxiter=200000
 maxlambda=float(os.environ['lambda'])
-lambdadecay=0.999992
+lambdadecay=0 #0.999992
 
 # UGH ... so much for DRY
 
 lrs=dict()
 lrs[('scoreip0',0)]=1
 lrs[('scoreip0',1)]=2
-lrs[('scorelogit',0)]=1
-lrs[('scorelogit',1)]=2
+lrs[('prescore',0)]=1
+lrs[('prescore',1)]=2
 
 def nicetime(dt):
   if (dt < 1):
@@ -115,8 +115,10 @@ numsinceupdates=0
 numupdates=0
 sumbalanceloss=0
 sumsincebalanceloss=0
-sumtreatmentloss=0
-sumsincetreatmentloss=0
+sumregloss=0
+sumsinceregloss=0
+summaxweight=0
+sumsincemaxweight=0
 sumate=0
 sumsinceate=0
 nextprint=1
@@ -125,8 +127,8 @@ sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 print "mean population diff: %g"%(np.mean(ynsw,dtype='d')-np.mean(ypsid,dtype='d'))
-print "%7s %7s %7s %11s %7s %11s %9s"%("delta t","balance","log","ate","example","learning","balance")
-print "%7s %7s %7s %11s %7s %11s %9s"%("","loss","loss","","counter","rate","lambda")
+print "%7s %7s %7s %7s %11s %7s %11s %9s"%("delta t","balance","max","reg","ate","example","learning","balance")
+print "%7s %7s %7s %7s %11s %7s %11s %9s"%("","loss","weight","loss","","counter","rate","lambda")
 
 maxminlambda=maxlambda
 for ii in range(maxiter):
@@ -138,25 +140,26 @@ for ii in range(maxiter):
     net.set_input_arrays(data,labels)
     res=net.forward()
     
-    ate = (
-      ( np.sum(np.multiply(ynsw,net.blobs['inverse_treated_score'].data[:,0,0,0]),
-               dtype='d') /
-        np.sum(net.blobs['inverse_treated_score'].data[:,0,0,0],dtype='d') ) -
-      ( np.sum(np.multiply(ypsid[psidperm[0:halfbatchsize]],
-                           net.blobs['inverse_untreated_score'].data[:,0,0,0]),
-               dtype='d') /
-        np.sum(net.blobs['inverse_untreated_score'].data[:,0,0,0],dtype='d') )
+    ate = ( np.dot(ynsw,net.blobs['treated_weight'].data.flat) -
+            np.dot(ypsid[psidperm[0:halfbatchsize]],
+                   net.blobs['untreated_weight'].data.flat) 
     )
-    
+
+    maxweight=max(np.max(net.blobs['treated_weight'].data),
+                  np.max(net.blobs['untreated_weight'].data))
+
     sumbalanceloss+=res['balance_loss']
     sumsincebalanceloss+=res['balance_loss']
-    sumtreatmentloss+=res['treatment_loss']
-    sumsincetreatmentloss+=res['treatment_loss']
+    summaxweight+=maxweight
+    sumsincemaxweight+=maxweight
+    sumregloss+=res['treated_weight_regularizer']+res['untreated_weight_regularizer']
+    sumsinceregloss+=res['treated_weight_regularizer']+res['untreated_weight_regularizer']
     sumate+=ate
     sumsinceate+=ate
 
     net.blobs['balancelambda0'].data[:]=maxlambda-maxminlambda
     net.blobs['balancelambda1'].data[:]=maxlambda-maxminlambda
+
     net.backward()
 
     for (name,layer,momlayer) in zip(net._layer_names,net.layers,momnet.layers):
@@ -179,129 +182,65 @@ for ii in range(maxiter):
         now=time.time()
         dt=float(now-start)
 
-        print "%7s %7.3f %7.3f %11.4f %7s %11.5e %9.3e"%(
+        print "%7s %7.3f %7.3f %7.1e %11.4f %7s %11.5e %9.3e"%(
             nicetime(dt),
             sumsincebalanceloss/numsinceupdates,
-            sumsincetreatmentloss/numsinceupdates,
+            sumsincemaxweight/numsinceupdates,
+            sumsinceregloss/numsinceupdates,
             sumsinceate/numsinceupdates,
             nicecount(2*numupdates*halfbatchsize),
             eta,
-            maxlambda-maxminlambda)
+            net.blobs['balancelambda0'].data.flat[0])
         nextprint=2*nextprint
         numsinceupdates=0
+        sumsincebalanceloss=0
         sumsincetreatedloss=0
         sumsinceuntreatedloss=0
-        sumsincetreatmentloss=0
+        sumsincemaxweight=0
+        sumsinceregloss=0
         sumsinceate=0
 
 now=time.time()
 dt=float(now-start)
 
-print "%7s %7.3f %7.3f %11.4f %7s %11.5e %9.3e"%(
+print "%7s %7.3f %7.3f %7.1e %11.4f %7s %11.5e %9.3e"%(
     nicetime(dt),
     sumsincebalanceloss/numsinceupdates,
-    sumsincetreatmentloss/numsinceupdates,
+    sumsincemaxweight/numsinceupdates,
+    sumsinceregloss/numsinceupdates,
     sumsinceate/numsinceupdates,
     nicecount(2*numupdates*halfbatchsize),
     eta,
-    maxlambda-maxminlambda)
+    net.blobs['balancelambda0'].data.flat[0])
 nextprint=2*nextprint
 numsinceupdates=0
 sumsincetreatedloss=0
 sumsinceuntreatedloss=0
-sumsincetreatmentloss=0
+sumsinceregloss=0
 
 net.set_phase_train()
 
-# GLOG_minloglevel=5 lambda=0 PYTHONPATH=../../python python makeadvpsmodel.py nsw_advps_train nsw_control.txt psid_controls.txt advplacebomodel
-# delta t balance     log         ate example    learning   balance
-#            loss    loss             counter        rate    lambda
-#    47ms  17.883   0.719  -1390.5475     850 9.99992e-04 0.000e+00
-#    64ms  36.117   0.718  -1354.4636      1K 9.99984e-04 0.000e+00
-#    87ms  36.235   0.718  -1415.5894      3K 9.99968e-04 0.000e+00
-#   145ms  36.582   0.715  -1204.0388      6K 9.99936e-04 0.000e+00
-#   249ms  35.365   0.706  -1327.2469     13K 9.99872e-04 0.000e+00
-#   398ms  33.785   0.682  -1346.2931     27K 9.99744e-04 0.000e+00
-#   806ms  30.164   0.637  -1318.7506     54K 9.99488e-04 0.000e+00
-#  1.392s  25.070   0.560  -1214.8328    108K 9.98977e-04 0.000e+00
-#  2.743s  18.539   0.427  -1020.0171    217K 9.97954e-04 0.000e+00
-#  5.521s  12.396   0.289   -848.5716    435K 9.95912e-04 0.000e+00
-# 10.158s   7.751   0.229   -829.6803    870K 9.91841e-04 0.000e+00
-# 19.329s   4.771   0.210   -669.4616      1M 9.83749e-04 0.000e+00
-# 37.553s   3.206   0.200   -654.1963      3M 9.67763e-04 0.000e+00
-#  1.228m   2.483   0.191   -792.8849      6M 9.36565e-04 0.000e+00
-#  2.421m   2.365   0.180   -770.2076     13M 8.77154e-04 0.000e+00
-#  5.139m   2.809   0.170   -777.2445     27M 7.69399e-04 0.000e+00
-#  9.967m   3.292   0.161   -927.7099     55M 5.91975e-04 0.000e+00
-# 19.400m   3.783   0.153   -871.9993    111M 3.50435e-04 0.000e+00
-# 29.515m   6.085   0.149   -813.8779    170M 2.01895e-04 0.000e+00
-
-# GLOG_minloglevel=5 lambda=0.001 PYTHONPATH=../../python python makeadvpsmodel.py nsw_advps_train nsw_control.txt psid_controls.txt advplacebomodel
-# delta t balance     log         ate example    learning   balance
-#            loss    loss             counter        rate    lambda
-#    86ms  17.883   0.719  -1390.5475     850 9.99992e-04 8.000e-09
-#    97ms  36.117   0.718  -1354.4636      1K 9.99984e-04 1.600e-08
-#   124ms  36.235   0.718  -1415.5894      3K 9.99968e-04 3.200e-08
-#   177ms  36.582   0.715  -1204.0389      6K 9.99936e-04 6.400e-08
-#   270ms  35.365   0.706  -1327.2472     13K 9.99872e-04 1.280e-07
-#   408ms  33.785   0.682  -1346.2945     27K 9.99744e-04 2.560e-07
-#   690ms  30.164   0.637  -1318.7551     54K 9.99488e-04 5.119e-07
-#  1.230s  25.070   0.560  -1214.8415    108K 9.98977e-04 1.023e-06
-#  2.437s  18.539   0.427  -1020.0281    217K 9.97954e-04 2.046e-06
-#  4.690s  12.395   0.289   -848.5993    435K 9.95912e-04 4.088e-06
-#  9.036s   7.750   0.229   -829.7682    870K 9.91841e-04 8.159e-06
-# 17.899s   4.769   0.210   -669.5432      1M 9.83749e-04 1.625e-05
-# 35.654s   3.203   0.200   -654.7145      3M 9.67763e-04 3.224e-05
-#  1.174m   2.477   0.191   -793.4364      6M 9.36565e-04 6.343e-05
-#  2.331m   2.309   0.180   -770.6687     13M 8.77154e-04 1.228e-04
-#  4.731m   2.339   0.170   -776.5212     27M 7.69399e-04 2.306e-04
-#  9.398m   2.327   0.161   -924.1202     55M 5.91975e-04 4.080e-04
-# 18.701m   2.339   0.153   -860.8924    111M 3.50435e-04 6.496e-04
-# 28.504m   3.398   0.149   -801.6915    170M 2.01895e-04 7.981e-04
-#  
-# GLOG_minloglevel=5 lambda=0.01 PYTHONPATH=../../python python makeadvpsmodel.py nsw_advps_train nsw_control.txt psid_controls.txt advplacebomodel
-# delta t balance     log         ate example    learning   balance
-#            loss    loss             counter        rate    lambda
-#    26ms  17.883   0.719  -1390.5475     850 9.99992e-04 8.000e-08
-#    40ms  36.117   0.718  -1354.4636      1K 9.99984e-04 1.600e-07
-#    59ms  36.235   0.718  -1415.5894      3K 9.99968e-04 3.200e-07
-#   103ms  36.582   0.715  -1204.0393      6K 9.99936e-04 6.400e-07
-#   187ms  35.365   0.706  -1327.2498     13K 9.99872e-04 1.280e-06
-#   326ms  33.785   0.682  -1346.3066     27K 9.99744e-04 2.560e-06
-#   633ms  30.164   0.637  -1318.7957     54K 9.99488e-04 5.119e-06
-#  1.201s  25.068   0.560  -1214.9210    108K 9.98977e-04 1.023e-05
-#  2.378s  18.536   0.427  -1020.1257    217K 9.97954e-04 2.046e-05
-#  4.680s  12.391   0.289   -848.8452    435K 9.95912e-04 4.088e-05
-#  9.158s   7.741   0.229   -830.5513    870K 9.91841e-04 8.159e-05
-# 18.121s   4.756   0.210   -670.1940      1M 9.83749e-04 1.625e-04
-# 36.424s   3.182   0.200   -658.4283      3M 9.67763e-04 3.224e-04
-#  1.209m   2.434   0.191   -798.6767      6M 9.36565e-04 6.343e-04
-#  2.407m   2.123   0.180   -777.3292     13M 8.77154e-04 1.228e-03
-#  4.772m   1.935   0.170   -770.3477     27M 7.69399e-04 2.306e-03
-#  9.616m   1.822   0.161   -888.3036     55M 5.91975e-04 4.080e-03
-# 20.091m   1.736   0.155   -818.7628    111M 3.50435e-04 6.496e-03
-# 30.013m   2.459   0.151   -801.4417    170M 2.01895e-04 7.981e-03
-
-# GLOG_minloglevel=5 lambda=0.1 PYTHONPATH=../../python python makeadvpsmodel.py nsw_advps_train nsw_control.txt psid_controls.txt advplacebomodel
-# delta t balance     log         ate example    learning   balance
-#            loss    loss             counter        rate    lambda
-#    42ms  17.883   0.719  -1390.5475     850 9.99992e-04 8.000e-07
-#    57ms  36.117   0.718  -1354.4636      1K 9.99984e-04 1.600e-06
-#    81ms  36.235   0.718  -1415.5900      3K 9.99968e-04 3.200e-06
-#   136ms  36.582   0.715  -1204.0434      6K 9.99936e-04 6.400e-06
-#   217ms  35.364   0.706  -1327.2765     13K 9.99872e-04 1.280e-05
-#   371ms  33.783   0.682  -1346.4312     27K 9.99744e-04 2.560e-05
-#   670ms  30.157   0.637  -1319.1979     54K 9.99488e-04 5.119e-05
-#  1.272s  25.052   0.559  -1215.7077    108K 9.98977e-04 1.023e-04
-#  2.541s  18.508   0.427  -1021.0980    217K 9.97954e-04 2.046e-04
-#  4.809s  12.347   0.289   -851.3000    435K 9.95912e-04 4.088e-04
-#  9.302s   7.654   0.228   -837.9874    870K 9.91841e-04 8.159e-04
-# 18.362s   4.646   0.210   -674.5502      1M 9.83749e-04 1.625e-03
-# 36.726s   3.058   0.200   -681.4498      3M 9.67763e-04 3.224e-03
-#  1.221m   2.260   0.191   -822.4619      6M 9.36565e-04 6.343e-03
-#  2.423m   1.848   0.181   -803.3193     13M 8.77154e-04 1.228e-02
-#  4.754m   1.627   0.172   -777.1697     27M 7.69399e-04 2.306e-02
-#  9.398m   1.488   0.165   -848.7976     55M 5.91975e-04 4.080e-02
-# 18.656m   1.346   0.161   -772.2984    111M 3.50435e-04 6.496e-02
-# 28.566m   1.826   0.160   -812.1403    170M 2.01895e-04 7.981e-02
+# kinda flass ...
+#
+# GLOG_minloglevel=5 eta=2e-3 lambda=0.05 PYTHONPATH=../../python python makeadvpsmodel.py nsw_advps_train nsw_control.txt psid_controls.txt advplacebomodel
+# mean population diff: -1.64639
+# delta t balance     max     reg         ate example    learning   balance
+#            loss  weight    loss             counter        rate    lambda
+#    23ms   9.505   0.003 5.5e-06     -1.7451     850 1.99998e-03 0.000e+00
+#    31ms   9.665   0.003 5.5e-06     -1.6714      1K 1.99997e-03 5.000e-02
+#    46ms   8.704   0.003 5.5e-06     -1.6488      3K 1.99994e-03 5.000e-02
+#    77ms   8.560   0.003 5.5e-06     -1.7360      6K 1.99987e-03 5.000e-02
+#   150ms   7.924   0.003 5.5e-06     -1.6263     13K 1.99974e-03 5.000e-02
+#   278ms   7.405   0.003 5.6e-06     -1.6298     27K 1.99949e-03 5.000e-02
+#   543ms   6.977   0.003 5.6e-06     -1.6354     54K 1.99898e-03 5.000e-02
+#  1.150s   6.026   0.004 5.7e-06     -1.5389    108K 1.99795e-03 5.000e-02
+#  2.159s   4.060   0.007 6.6e-06     -1.3695    217K 1.99591e-03 5.000e-02
+#  4.213s   1.015   0.029 1.6e-05     -0.9462    435K 1.99182e-03 5.000e-02
+#  8.240s   0.380   0.050 2.4e-05     -0.7221    870K 1.98368e-03 5.000e-02
+# 16.372s   0.217   0.061 3.0e-05     -0.6128      1M 1.96750e-03 5.000e-02
+# 32.720s   0.148   0.064 3.2e-05     -0.5515      3M 1.93553e-03 5.000e-02
+#  1.086m   0.107   0.061 3.2e-05     -0.5191      6M 1.87313e-03 5.000e-02
+#  2.167m   0.079   0.053 3.3e-05     -0.5546     13M 1.75431e-03 5.000e-02
+#  4.331m   0.043   0.091 4.7e-05     -0.6764     27M 1.53880e-03 5.000e-02
+#  8.651m   0.030   0.108 5.8e-05     -0.7630     55M 1.18395e-03 5.000e-02
 

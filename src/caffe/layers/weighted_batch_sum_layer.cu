@@ -8,7 +8,7 @@
 namespace caffe {
 
 template <typename Dtype>
-void WeightedBatchAverageLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+void WeightedBatchSumLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     vector<Blob<Dtype>*>* top) {
   const int dim = (*top)[0]->count();
   const int num = bottom[0]->count();
@@ -18,12 +18,12 @@ void WeightedBatchAverageLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& b
 
   caffe_gpu_set(dim, Dtype(0), top_data);
   for (int i = 0; i < num; ++i) {
-    caffe_gpu_axpy(dim, bottom_data0[i] / num, bottom_data1 + i*dim, top_data);
+    caffe_gpu_axpy(dim, bottom_data0[i], bottom_data1 + i*dim, top_data);
   }
 }
 
 template <typename Dtype>
-void WeightedBatchAverageLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
+void WeightedBatchSumLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom) {
 
   const int dim = top[0]->count();
@@ -46,15 +46,11 @@ void WeightedBatchAverageLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& 
     if (propagate_down[1]) {
 #define caffe_gpu_copy caffe_copy
       caffe_gpu_copy (dim, top_diff, bottom_diff1 + i*dim);
-      caffe_gpu_scal (dim, bottom_data0[i] / num, bottom_diff1 + i*dim);
+      caffe_gpu_scal (dim, bottom_data0[i], bottom_diff1 + i*dim);
     }
-  }
-
-  if (propagate_down[0]) {
-    caffe_scal (num, Dtype(1)/num, bottom_diff0);
   }
 }
 
-INSTANTIATE_CLASS(WeightedBatchAverageLayer);
+INSTANTIATE_CLASS(WeightedBatchSumLayer);
 
 }  // namespace caffe

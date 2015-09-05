@@ -539,15 +539,15 @@ class SliceLayer : public Layer<Dtype> {
 };
 
 template <typename Dtype>
-class WeightedBatchAverageLayer : public Layer<Dtype> {
+class WeightedBatchSumLayer : public Layer<Dtype> {
  public:
-  explicit WeightedBatchAverageLayer(const LayerParameter& param)
+  explicit WeightedBatchSumLayer(const LayerParameter& param)
       : Layer<Dtype>(param) {}
   virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
       vector<Blob<Dtype>*>* top);
 
   virtual inline LayerParameter_LayerType type() const {
-    return LayerParameter_LayerType_WEIGHTED_BATCH_AVERAGE;
+    return LayerParameter_LayerType_WEIGHTED_BATCH_SUM;
   }
   virtual inline int ExactNumBottomBlobs() const { return 2; }
   virtual inline int ExactNumTopBlobs() const { return 1; }
@@ -561,6 +561,41 @@ class WeightedBatchAverageLayer : public Layer<Dtype> {
       const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
+};
+
+/*
+ * @brief Reshapes the input Blob into an arbitrary-sized output Blob.
+ *
+ * Note: similarly to FlattenLayer, this layer does not change the input values
+ * (see FlattenLayer, Blob::ShareData and Blob::ShareDiff).
+ */
+template <typename Dtype>
+class ReshapeLayer : public Layer<Dtype> {
+ public:
+  explicit ReshapeLayer(const LayerParameter& param)
+      : Layer<Dtype>(param) {}
+  virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+
+ protected:
+  virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual void Backward_cpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<bool>& propagate_down,
+      vector<Blob<Dtype>*>* top);
+  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
+
+  void FillInSingleUnspecifiedDimension(int bottom_count);
+
+  int num_out;
+  int channels_out;
+  int height_out;
+  int width_out;
 };
 
 }  // namespace caffe

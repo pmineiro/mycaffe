@@ -96,10 +96,10 @@ layers {
 }
 
 layers {
-  name: "scorelogit"
+  name: "prescore"
   type: INNER_PRODUCT
   bottom: "scoreip0"
-  top: "scorelogit"
+  top: "prescore"
   blobs_lr: 1
   blobs_lr: 2
   inner_product_param {
@@ -114,41 +114,11 @@ layers {
 }
 
 layers {
-  name: "score"
-  type: SOFTMAX
-  bottom: "scorelogit"
-  top: "score"
-}
-
-layers {
-  name: "treatment_labels"
-  type: CONCAT
-  bottom: "plus_one"
-  bottom: "zero"
-  top: "treatment_labels"
-  concat_param {
-    concat_dim: 0
-  }
-
-  include: { phase: TRAIN }
-}
-
-layers {
-  name: "treatment_loss"
-  type: SOFTMAX_LOSS
-  bottom: "scorelogit"
-  bottom: "treatment_labels"
-  top: "treatment_loss"
-
-  include: { phase: TRAIN }
-}
-
-layers {
-  name: "slice_score_both"
+  name: "slice_prescore_both"
   type: SLICE
-  bottom: "score"
-  top: "treated_score_both"
-  top: "untreated_score_both"
+  bottom: "prescore"
+  top: "treated_prescore_both"
+  top: "untreated_prescore_both"
   slice_param {
     slice_dim: 0
   }
@@ -157,11 +127,11 @@ layers {
 }
 
 layers {
-  name: "treated_score"
+  name: "treated_prescore"
   type: SLICE
-  bottom: "treated_score_both"
-  top: "_treated_score_discard"
-  top: "treated_score"
+  bottom: "treated_prescore_both"
+  top: "_treated_prescore_discard"
+  top: "treated_prescore"
   slice_param {
     slice_dim: 1
   }
@@ -170,11 +140,52 @@ layers {
 }
 
 layers {
-  name: "untreated_score"
+  name: "treated_prescore_trans"
+  type: RESHAPE
+  bottom: "treated_prescore"
+  top: "treated_prescore_trans"
+  reshape_param { num: 1 channels: -1 height: 1 width: 1 }
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "treated_weight"
+  type: SOFTMAX
+  bottom: "treated_prescore_trans"
+  top: "treated_weight"
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "treated_weight_trans"
+  type: RESHAPE
+  bottom: "treated_weight"
+  top: "treated_weight_tran"
+
+  reshape_param { num: -1 channels: 1 height: 1 width: 1 }
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "treated_weight_regularizer"
+#type: MULTINOMIAL_LOGISTIC_LOSS
+  type: EUCLIDEAN_LOSS
+  bottom: "treated_weight_tran"
+  bottom: "zero"
+  top: "treated_weight_regularizer"
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "untreated_prescore"
   type: SLICE
-  bottom: "untreated_score_both"
-  top: "untreated_score"
-  top: "_untreated_score_discard"
+  bottom: "untreated_prescore_both"
+  top: "untreated_prescore"
+  top: "_untreated_prescore_discard"
   slice_param {
     slice_dim: 1
   }
@@ -183,29 +194,42 @@ layers {
 }
 
 layers {
-  name: "inverse_treated_score"
-  type: POWER
-  bottom: "treated_score"
-  top: "inverse_treated_score"
-  power_param {
-    power: -1
-    scale: 0.99999     # scale = (1.0 - shift)
-    shift: 1e-5
-  }
+  name: "untreated_prescore_trans"
+  type: RESHAPE
+  bottom: "untreated_prescore"
+  top: "untreated_prescore_trans"
+  reshape_param { num: 1 channels: -1 height: 1 width: 1 }
 
   include: { phase: TRAIN }
 }
 
 layers {
-  name: "inverse_untreated_score"
-  type: POWER
-  bottom: "untreated_score"
-  top: "inverse_untreated_score"
-  power_param {
-    power: -1
-    scale: 0.99999     # scale = (1.0 - shift)
-    shift: 1e-5
-  }
+  name: "untreated_weight"
+  type: SOFTMAX
+  bottom: "untreated_prescore_trans"
+  top: "untreated_weight"
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "untreated_weight_trans"
+  type: RESHAPE
+  bottom: "untreated_weight"
+  top: "untreated_weight_tran"
+
+  reshape_param { num: -1 channels: 1 height: 1 width: 1 }
+
+  include: { phase: TRAIN }
+}
+
+layers {
+  name: "untreated_weight_regularizer"
+#type: MULTINOMIAL_LOGISTIC_LOSS
+  type: EUCLIDEAN_LOSS
+  bottom: "untreated_weight_tran"
+  bottom: "zero"
+  top: "untreated_weight_regularizer"
 
   include: { phase: TRAIN }
 }
@@ -237,7 +261,6 @@ layers {
   type: CONCAT
   bottom: "treated_covariates"
   bottom: "treated_covariates_squared"
-  bottom: "plus_one"
   top: "treated_statistics"
 
   include: { phase: TRAIN }
@@ -262,7 +285,6 @@ layers {
   type: CONCAT
   bottom: "untreated_covariates"
   bottom: "untreated_covariates_squared"
-  bottom: "plus_one"
   top: "untreated_statistics"
 
   include: { phase: TRAIN }
@@ -270,8 +292,8 @@ layers {
 
 layers {
   name: "batchaverage_weighted_treated_statistics"
-  type: WEIGHTED_BATCH_AVERAGE
-  bottom: "inverse_treated_score"
+  type: WEIGHTED_BATCH_SUM
+  bottom: "treated_weight"
   bottom: "treated_statistics"
   top: "batchaverage_weighted_treated_statistics"
 
@@ -280,8 +302,8 @@ layers {
 
 layers {
   name: "batchaverage_weighted_untreated_statistics"
-  type: WEIGHTED_BATCH_AVERAGE
-  bottom: "inverse_untreated_score"
+  type: WEIGHTED_BATCH_SUM
+  bottom: "untreated_weight"
   bottom: "untreated_statistics"
   top: "batchaverage_weighted_untreated_statistics"
 

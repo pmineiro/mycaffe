@@ -8,9 +8,11 @@ all:
 
 clean: 
 
-lambda=0.0
+nswplacebomodel: lambda=1e-3
 nswplacebomodel: nsw_train nsw_control.txt psid_controls.txt
 	GLOG_minloglevel=5 lambda=$(lambda) PYTHONPATH=../../python python makenswmodel.py $^ $@
 
+advplacebomodel: lambda=0.1
+advplacebomodel: eta=1e-3
 advplacebomodel: nsw_advps_train nsw_control.txt psid_controls.txt
-	GLOG_minloglevel=5 lambda=$(lambda) PYTHONPATH=../../python python makeadvpsmodel.py $^ $@
+	GLOG_minloglevel=5 eta=$(eta) lambda=$(lambda) PYTHONPATH=../../python python makeadvpsmodel.py $^ $@
