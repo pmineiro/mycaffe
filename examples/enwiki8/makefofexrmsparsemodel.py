@@ -17,7 +17,7 @@ alpha=0.9
 eta=1.0
 etadecay=0.99999
 weightdecay=1e-5
-kappa=0.25
+kappa=float(os.environ['kappa'])
 
 # UGH ... so much for DRY
 
@@ -125,11 +125,17 @@ for line in f:
         meanloss=np.mean(net.blobs['lossdetail'].data,dtype='d')
         sumloss+=meanloss
         sumsinceloss+=meanloss
+
         meansquareloss=np.mean(np.square(net.blobs['lossdetail'].data),dtype='d')
         sigma=math.sqrt(meansquareloss-meanloss*meanloss)
         sumsigma+=sigma
         sumsincesigma+=sigma
-        net.blobs['lossdetail'].data[:]=1+kappa*np.divide(net.blobs['lossdetail'].data-meanloss,sigma)
+        #net.blobs['lossdetail'].data[:]=1+kappa*np.divide(net.blobs['lossdetail'].data-meanloss,sigma)
+        maxloss=kappa*np.max(net.blobs['lossdetail'].data)
+        softmax=np.exp(kappa*net.blobs['lossdetail'].data-maxloss)
+        sumsoftmax=np.sum(softmax)/batchsize
+        net.blobs['lossdetail'].data[:]=softmax/sumsoftmax
+
         net.backward()
         data_diff=net.blobs['data'].diff.reshape(batchsize,embeddingsize)
 
@@ -332,4 +338,29 @@ h5f.close()
 #  92315.973       5.0724  4.8939  3.6259  3.5745    49152000        0.720592
 # 190444.464       4.9032  4.7339  3.5663  3.5067    98304000        0.519253
 # 217202.655       4.8719  4.6449  3.5545  3.4692   111871500        0.474348
+
+
+# softmax = hot
+# pmineiro@pmineiro-KGP-M-E-D16-594% make fofexrmsparsemodel9 kappa=0.05
+# GLOG_minloglevel=5 PYTHONPATH=../../python kappa=0.05 python makefofexrmsparsemodel.py fofe_xrm_sparse_small_unigram_train `cat numlinesfofengram9 | perl -lane 'print int(0.9*$F[0])'` fofengram9.txt.gz histo9 fofexrmsparsemodel9
+#    delta t      average   since average   since     example        learning
+#                    loss    last   sigma    last     counter            rate
+#      2.250      11.2876 11.2876  0.0106  0.0106        1500         0.99999
+#      4.419      11.2819 11.2763  0.0176  0.0246        3000         0.99998
+#      8.158      11.2611 11.2402  0.0488  0.0800        6000         0.99996
+#     14.755      11.1820 11.1030  0.1686  0.2885       12000         0.99992
+#     27.377      10.7337 10.2854  0.8619  1.5552       24000         0.99984
+#     51.229       9.6575  8.5814  2.0963  3.3307       48000         0.99968
+#     98.232       8.7260  7.7944  2.8594  3.6225       96000         0.99936
+#    191.148       7.9069  7.0877  3.1956  3.5317      192000        0.998721
+#    374.298       7.4083  6.9097  3.3587  3.5219      384000        0.997443
+#    743.322       6.8049  6.2015  3.5494  3.7402      768000        0.994893
+#   1664.170       6.3311  5.8572  3.6845  3.8195     1536000        0.989812
+#   4412.256       5.9743  5.6176  3.7516  3.8187     3072000        0.979728
+#  10359.347       5.6924  5.4105  3.7687  3.7859     6144000        0.959867
+#  22732.795       5.4579  5.2233  3.7509  3.7331    12288000        0.921345
+#  47781.948       5.2552  5.0526  3.7119  3.6728    24576000        0.848877
+#  99757.293       5.0726  4.8901  3.6601  3.6084    49152000        0.720592
+# 208137.960       4.9010  4.7293  3.6011  3.5421    98304000        0.519253
+# 238774.155       4.8694  4.6408  3.5896  3.5064   111871500        0.474348
 
