@@ -23,8 +23,9 @@ namespace caffe {
 template <typename Dtype>
 class Net {
  public:
-  explicit Net(const NetParameter& param);
-  explicit Net(const string& param_file);
+  explicit Net(const NetParameter& param, const Net* root_net = NULL);
+  explicit Net(const string& param_file, Phase phase,
+      const Net* root_net = NULL);
   virtual ~Net() {}
 
   /// @brief Initialize a network with a NetParameter.
@@ -58,6 +59,12 @@ class Net {
   string Forward(const string& input_blob_protos, Dtype* loss = NULL);
 
   /**
+   * @brief Zeroes out the diffs of all net parameters.
+   *        Should be run before Backward.
+   */
+  void ClearParamDiffs();
+
+  /**
    * The network backward should take no input and output, since it solely
    * computes the gradient w.r.t the parameters, and the data has already been
    * provided during the forward pass.
@@ -84,12 +91,19 @@ class Net {
 
   /// @brief Updates the network weights based on the diff values computed.
   void Update();
+  /**
+   * @brief Shares weight data of owner blobs with shared blobs.
+   *
+   * Note: this is called by Net::Init, and thus should normally not be
+   * called manually.
+   */
+  void ShareWeights();
 
   /**
    * @brief For an already initialized net, implicitly copies (i.e., using no
    *        additional memory) the pre-trained layers from another Net.
    */
-  void ShareTrainedLayersWith(Net* other);
+  void ShareTrainedLayersWith(const Net* other);
   // For an already initialized net, CopyTrainedLayersFrom() copies the already
   // trained layers from another net parameter instance.
   /**
@@ -98,52 +112,92 @@ class Net {
    */
   void CopyTrainedLayersFrom(const NetParameter& param);
   void CopyTrainedLayersFrom(const string trained_filename);
+  void CopyTrainedLayersFromBinaryProto(const string trained_filename);
+  void CopyTrainedLayersFromHDF5(const string trained_filename);
   /// @brief Writes the net to a proto.
-  void ToProto(NetParameter* param, bool write_diff = false);
+  void ToProto(NetParameter* param, bool write_diff = false) const;
+  /// @brief Writes the net to an HDF5 file.
+  void ToHDF5(const string& filename, bool write_diff = false) const;
 
   /// @brief returns the network name.
-  inline const string& name() { return name_; }
+  inline const string& name() const { return name_; }
   /// @brief returns the layer names
-  inline const vector<string>& layer_names() { return layer_names_; }
+  inline const vector<string>& layer_names() const { return layer_names_; }
   /// @brief returns the blob names
-  inline const vector<string>& blob_names() { return blob_names_; }
+  inline const vector<string>& blob_names() const { return blob_names_; }
   /// @brief returns the blobs
-  inline const vector<shared_ptr<Blob<Dtype> > >& blobs() { return blobs_; }
+  inline const vector<shared_ptr<Blob<Dtype> > >& blobs() const {
+    return blobs_;
+  }
   /// @brief returns the layers
-  inline const vector<shared_ptr<Layer<Dtype> > >& layers() { return layers_; }
+  inline const vector<shared_ptr<Layer<Dtype> > >& layers() const {
+    return layers_;
+  }
+  /// @brief returns the phase: TRAIN or TEST
+  inline Phase phase() const { return phase_; }
   /**
    * @brief returns the bottom vecs for each layer -- usually you won't
    *        need this unless you do per-layer checks such as gradients.
    */
-  inline vector<vector<Blob<Dtype>*> >& bottom_vecs() { return bottom_vecs_; }
+  inline const vector<vector<Blob<Dtype>*> >& bottom_vecs() const {
+    return bottom_vecs_;
+  }
   /**
    * @brief returns the top vecs for each layer -- usually you won't
    *        need this unless you do per-layer checks such as gradients.
    */
-  inline vector<vector<Blob<Dtype>*> >& top_vecs() { return top_vecs_; }
-  inline vector<vector<bool> >& bottom_need_backward() {
+  inline const vector<vector<Blob<Dtype>*> >& top_vecs() const {
+    return top_vecs_;
+  }
+  inline const vector<vector<bool> >& bottom_need_backward() const {
     return bottom_need_backward_;
   }
-  inline vector<Dtype>& blob_loss_weights() {
+  inline const vector<Dtype>& blob_loss_weights() const {
     return blob_loss_weights_;
   }
+  inline const vector<bool>& layer_need_backward() const {
+    return layer_need_backward_;
+  }
   /// @brief returns the parameters
-  inline vector<shared_ptr<Blob<Dtype> > >& params() { return params_; }
-  /// @brief returns the parameter learning rate multipliers
-  inline vector<float>& params_lr() { return params_lr_; }
-  inline vector<float>& params_weight_decay() { return params_weight_decay_; }
-  const map<string, int>& param_names_index() { return param_names_index_; }
+  inline const vector<shared_ptr<Blob<Dtype> > >& params() const {
+    return params_;
+  }
+  inline const vector<Blob<Dtype>*>& learnable_params() const {
+    return learnable_params_;
+  }
+  /// @brief returns the learnable parameter learning rate multipliers
+  inline const vector<float>& params_lr() const { return params_lr_; }
+  inline const vector<bool>& has_params_lr() const { return has_params_lr_; }
+  /// @brief returns the learnable parameter decay multipliers
+  inline const vector<float>& params_weight_decay() const {
+    return params_weight_decay_;
+  }
+  inline const vector<bool>& has_params_decay() const {
+    return has_params_decay_;
+  }
+  const map<string, int>& param_names_index() const {
+    return param_names_index_;
+  }
+  inline const vector<int>& param_owners() const { return param_owners_; }
   /// @brief Input and output blob numbers
-  inline int num_inputs() { return net_input_blobs_.size(); }
-  inline int num_outputs() { return net_output_blobs_.size(); }
-  inline vector<Blob<Dtype>*>& input_blobs() { return net_input_blobs_; }
-  inline vector<Blob<Dtype>*>& output_blobs() { return net_output_blobs_; }
-  inline vector<int>& input_blob_indices() { return net_input_blob_indices_; }
-  inline vector<int>& output_blob_indices() { return net_output_blob_indices_; }
-  bool has_blob(const string& blob_name);
-  const shared_ptr<Blob<Dtype> > blob_by_name(const string& blob_name);
-  bool has_layer(const string& layer_name);
-  const shared_ptr<Layer<Dtype> > layer_by_name(const string& layer_name);
+  inline int num_inputs() const { return net_input_blobs_.size(); }
+  inline int num_outputs() const { return net_output_blobs_.size(); }
+  inline const vector<Blob<Dtype>*>& input_blobs() const {
+    return net_input_blobs_;
+  }
+  inline const vector<Blob<Dtype>*>& output_blobs() const {
+    return net_output_blobs_;
+  }
+  inline const vector<int>& input_blob_indices() const {
+    return net_input_blob_indices_;
+  }
+  inline const vector<int>& output_blob_indices() const {
+    return net_output_blob_indices_;
+  }
+  bool has_blob(const string& blob_name) const;
+  const shared_ptr<Blob<Dtype> > blob_by_name(const string& blob_name) const;
+  bool has_layer(const string& layer_name) const;
+  const shared_ptr<Layer<Dtype> > layer_by_name(const string& layer_name) const;
 
   void set_debug_info(const bool value) { debug_info_ = value; }
 
@@ -172,6 +226,8 @@ class Net {
   void AppendParam(const NetParameter& param, const int layer_id,
                    const int param_id);
 
+  /// @brief Helper for displaying debug info in Forward about input Blobs.
+  void InputDebugInfo(const int layer_id);
   /// @brief Helper for displaying debug info in Forward.
   void ForwardDebugInfo(const int layer_id);
   /// @brief Helper for displaying debug info in Backward.
@@ -179,9 +235,10 @@ class Net {
   /// @brief Helper for displaying debug info in Update.
   void UpdateDebugInfo(const int param_id);
 
-  /// @brief Get misc parameters, e.g. the LR multiplier and weight decay.
-  void GetLearningRateAndWeightDecay();
-
+  /// @brief The network name
+  string name_;
+  /// @brief The phase: TRAIN or TEST
+  Phase phase_;
   /// @brief Individual layers in the net
   vector<shared_ptr<Layer<Dtype> > > layers_;
   vector<string> layer_names_;
@@ -204,6 +261,7 @@ class Net {
   /// Vector of weight in the loss (or objective) function of each net blob,
   /// indexed by blob_id.
   vector<Dtype> blob_loss_weights_;
+  vector<vector<int> > param_id_vecs_;
   vector<int> param_owners_;
   vector<string> param_display_names_;
   vector<pair<int, int> > param_layer_indices_;
@@ -213,18 +271,29 @@ class Net {
   vector<int> net_output_blob_indices_;
   vector<Blob<Dtype>*> net_input_blobs_;
   vector<Blob<Dtype>*> net_output_blobs_;
-  string name_;
   /// The parameters in the network.
   vector<shared_ptr<Blob<Dtype> > > params_;
-  /// the learning rate multipliers
+  vector<Blob<Dtype>*> learnable_params_;
+  /**
+   * The mapping from params_ -> learnable_params_: we have
+   * learnable_param_ids_.size() == params_.size(),
+   * and learnable_params_[learnable_param_ids_[i]] == params_[i].get()
+   * if and only if params_[i] is an "owner"; otherwise, params_[i] is a sharer
+   * and learnable_params_[learnable_param_ids_[i]] gives its owner.
+   */
+  vector<int> learnable_param_ids_;
+  /// the learning rate multipliers for learnable_params_
   vector<float> params_lr_;
-  /// the weight decay multipliers
+  vector<bool> has_params_lr_;
+  /// the weight decay multipliers for learnable_params_
   vector<float> params_weight_decay_;
+  vector<bool> has_params_decay_;
   /// The bytes of memory used by this net
   size_t memory_used_;
   /// Whether to compute and display debug info for the net.
   bool debug_info_;
-
+  /// The root net that actually holds the shared layers in data parallelism
+  const Net* const root_net_;
   DISABLE_COPY_AND_ASSIGN(Net);
 };
 

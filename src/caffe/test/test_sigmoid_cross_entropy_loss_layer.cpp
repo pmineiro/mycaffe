@@ -1,6 +1,4 @@
 #include <cmath>
-#include <cstdlib>
-#include <cstring>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -8,7 +6,7 @@
 #include "caffe/blob.hpp"
 #include "caffe/common.hpp"
 #include "caffe/filler.hpp"
-#include "caffe/vision_layers.hpp"
+#include "caffe/loss_layers.hpp"
 
 #include "caffe/test/test_caffe_main.hpp"
 #include "caffe/test/test_gradient_check_util.hpp"
@@ -79,9 +77,9 @@ class SigmoidCrossEntropyLossLayerTest : public MultiDeviceTest<TypeParam> {
       // Fill the targets vector
       targets_filler.Fill(this->blob_bottom_targets_);
       SigmoidCrossEntropyLossLayer<Dtype> layer(layer_param);
-      layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+      layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
       Dtype layer_loss =
-          layer.Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+          layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
       const int count = this->blob_bottom_data_->count();
       const int num = this->blob_bottom_data_->num();
       const Dtype* blob_bottom_data = this->blob_bottom_data_->cpu_data();
@@ -112,10 +110,10 @@ TYPED_TEST(SigmoidCrossEntropyLossLayerTest, TestGradient) {
   const Dtype kLossWeight = 3.7;
   layer_param.add_loss_weight(kLossWeight);
   SigmoidCrossEntropyLossLayer<Dtype> layer(layer_param);
-  layer.SetUp(this->blob_bottom_vec_, &this->blob_top_vec_);
+  layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   GradientChecker<Dtype> checker(1e-2, 1e-2, 1701);
-  checker.CheckGradientExhaustive(&layer, &(this->blob_bottom_vec_),
-      &(this->blob_top_vec_), 0);
+  checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
+      this->blob_top_vec_, 0);
 }
 
 

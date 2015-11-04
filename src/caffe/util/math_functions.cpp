@@ -207,6 +207,16 @@ void caffe_exp<double>(const int n, const double* a, double* y) {
 }
 
 template <>
+void caffe_log<float>(const int n, const float* a, float* y) {
+  vsLn(n, a, y);
+}
+
+template <>
+void caffe_log<double>(const int n, const double* a, double* y) {
+  vdLn(n, a, y);
+}
+
+template <>
 void caffe_abs<float>(const int n, const float* a, float* y) {
     vsAbs(n, a, y);
 }
@@ -369,9 +379,6 @@ template <>
 double caffe_cpu_asum<double>(const int n, const double* x) {
   return cblas_dasum(n, x, 1);
 }
-
-INSTANTIATE_CAFFE_CPU_UNARY_FUNC(sign);
-INSTANTIATE_CAFFE_CPU_UNARY_FUNC(sgnbit);
 
 template <>
 void caffe_cpu_scale<float>(const int n, const float alpha, const float *x,

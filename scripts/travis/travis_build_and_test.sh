@@ -1,5 +1,6 @@
 #!/bin/bash
-# Script called by Travis to do a CPU-only build of and test Caffe.
+# Script called by Travis to build and test Caffe.
+# Travis CI tests are CPU-only for lack of compatible hardware.
 
 set -e
 MAKE="make --jobs=$NUM_THREADS --keep-going"
@@ -7,8 +8,22 @@ MAKE="make --jobs=$NUM_THREADS --keep-going"
 if $WITH_CMAKE; then
   mkdir build
   cd build
-  cmake -DBUILD_PYTHON=ON -DBUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Release -DCPU_ONLY=ON ..
+  CPU_ONLY=" -DCPU_ONLY=ON"
+  if ! $WITH_CUDA; then
+    CPU_ONLY=" -DCPU_ONLY=OFF"
+  fi
+  PYTHON_ARGS=""
+  if [ "$PYTHON_VERSION" = "3" ]; then
+    PYTHON_ARGS="$PYTHON_ARGS -Dpython_version=3 -DBOOST_LIBRARYDIR=$CONDA_DIR/lib/"
+  fi
+  if $WITH_IO; then
+    IO_ARGS="-DUSE_OPENCV=ON -DUSE_LMDB=ON -DUSE_LEVELDB=ON"
+  else
+    IO_ARGS="-DUSE_OPENCV=OFF -DUSE_LMDB=OFF -DUSE_LEVELDB=OFF"
+  fi
+  cmake -DBUILD_python=ON -DCMAKE_BUILD_TYPE=Release $CPU_ONLY $PYTHON_ARGS -DCMAKE_INCLUDE_PATH="$CONDA_DIR/include/" -DCMAKE_LIBRARY_PATH="$CONDA_DIR/lib/" $IO_ARGS ..
   $MAKE
+  $MAKE pytest
   if ! $WITH_CUDA; then
     $MAKE runtest
     $MAKE lint
@@ -19,6 +34,11 @@ else
   if ! $WITH_CUDA; then
     export CPU_ONLY=1
   fi
+  if $WITH_IO; then
+    export USE_LMDB=1
+    export USE_LEVELDB=1
+    export USE_OPENCV=1
+  fi
   $MAKE all test pycaffe warn lint || true
   if ! $WITH_CUDA; then
     $MAKE runtest
@@ -26,6 +46,7 @@ else
   $MAKE all
   $MAKE test
   $MAKE pycaffe
+  $MAKE pytest
   $MAKE warn
   if ! $WITH_CUDA; then
     $MAKE lint
