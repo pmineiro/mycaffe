@@ -19,15 +19,15 @@ windowsize=10
 embedd=300
 batchsize=3000
 
-alpha=0.5 
-eta=1e-2
+alpha=0.9 
+eta=1e-3
 etadecay=0.999
 weightdecay=1e-5 
 
 lrs=dict()
 lrs['embedding']=0.1
 lrs[('lastip',0)]=1
-lrs[('lastip',1)]=1
+lrs[('lastip',1)]=0.1
 
 def net(batchsize,embedd,windowsize,numtags):
   n = caffe.NetSpec()
@@ -79,7 +79,7 @@ for (layer,momlayer) in zip(solver.net.layers,solver.test_nets[0].layers):
     if blobnum == 0:
       blob.data[:]=0.1/math.sqrt(blob.data.shape[-1])*np.random.standard_normal(size=blob.data.shape)
     else:
-      blob.data[:]=0
+      blob.data[:]=-7
     momblob.data[:]=np.zeros(blob.data.shape,dtype='f')
     blobnum=blobnum+1 
 
@@ -92,15 +92,15 @@ sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 print "%7s\t%8s\t%8s\t%7s\t%11s"%("delta t","average","since","example","learning") 
 print "%7s\t%8s\t%8s\t%7s\t%11s"%("","loss","last","counter","rate") 
 
-for passes in range(2):
-  bindex=0
-  start=time.time()
-  numsinceupdates=0 
-  numupdates=0 
-  sumloss=0 
-  sumsinceloss=0 
-  nextprint=1 
+bindex=0
+start=time.time()
+numsinceupdates=0 
+numupdates=0 
+sumloss=0 
+sumsinceloss=0 
+nextprint=1 
 
+for passes in range(2):
   with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
     comboinputs=np.zeros((batchsize,windowsize*embedd+numtags,1,1),dtype='f')
     bogus=np.zeros((batchsize,1,1,1),dtype='f')
@@ -171,7 +171,7 @@ for passes in range(2):
           h5f.create_dataset('embedding',data=embedding) 
           h5f.close() 
           now=time.time() 
-          print "%7s\t%8.3f\t%8.3f\t%7s\t%11.6g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),eta) 
+          print "%7s\t%8.3f\t%8.3f\t%7s\t%11.4g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),eta) 
           nextprint=2*nextprint 
           numsinceupdates=0 
           sumsinceloss=0 
@@ -183,3 +183,19 @@ h5f.create_dataset('embedding',data=embedding)
 h5f.close() 
 now=time.time() 
 print "%7s\t%8.3f\t%8.3f\t%7s\t%11.6g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),eta) 
+
+# GLOG_minloglevel=5 PYTHONPATH=../../python python ./pretrain.py
+# delta t  average           since        example    learning
+#             loss            last        counter        rate
+#  5.388s   22.500          22.500             3K    0.000999
+# 10.530s   22.767          23.034             6K    0.000998
+# 19.621s   22.911          23.056            12K    0.000996
+# 36.058s   22.763          22.616            24K    0.000992
+#  1.129m   22.694          22.624            48K   0.0009841
+#  2.196m   22.737          22.779            96K   0.0009685
+#  4.297m   22.626          22.515           192K    0.000938
+#  8.444m   22.460          22.295           384K   0.0008798
+# 16.645m   22.246          22.031           768K    0.000774
+# 33.006m   22.167          22.089             1M   0.0005991
+#
+# (stopped, somewhat flass)
