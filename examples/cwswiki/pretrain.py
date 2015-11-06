@@ -17,15 +17,15 @@ numtags=13039
 numtokens=260544
 windowsize=10
 embedd=300
-batchsize=2000
+batchsize=3000
 
-alpha=0.9 
-eta=0.01
-etadecay=0.99999 
+alpha=0.5 
+eta=1e-2
+etadecay=0.999
 weightdecay=1e-5 
 
 lrs=dict()
-lrs['embedding']=1
+lrs['embedding']=0.1
 lrs[('lastip',0)]=1
 lrs[('lastip',1)]=1
 
@@ -74,9 +74,14 @@ caffe.set_mode_gpu()
 solver = caffe.SGDSolver('pretrain_solver.prototxt')
 
 for (layer,momlayer) in zip(solver.net.layers,solver.test_nets[0].layers):
+  blobnum=0 
   for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
-    blob.data[:]=1/math.sqrt(blob.data.shape[-1])*np.random.standard_normal(size=blob.data.shape)
+    if blobnum == 0:
+      blob.data[:]=0.1/math.sqrt(blob.data.shape[-1])*np.random.standard_normal(size=blob.data.shape)
+    else:
+      blob.data[:]=0
     momblob.data[:]=np.zeros(blob.data.shape,dtype='f')
+    blobnum=blobnum+1 
 
 embedding=(1.0/math.sqrt(embedd))*np.random.standard_normal(size=(embedd,numtokens+1)).astype(float)
 momembeddiff=np.zeros(shape=(embedd,numtokens+1),dtype='f')
@@ -87,7 +92,7 @@ sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 print "%7s\t%8s\t%8s\t%7s\t%11s"%("delta t","average","since","example","learning") 
 print "%7s\t%8s\t%8s\t%7s\t%11s"%("","loss","last","counter","rate") 
 
-with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
+for passes in range(2):
   bindex=0
   start=time.time()
   numsinceupdates=0 
@@ -96,76 +101,85 @@ with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
   sumsinceloss=0 
   nextprint=1 
 
-  comboinputs=np.zeros((batchsize,windowsize*embedd+numtags,1,1),dtype='f')
-  bogus=np.zeros((batchsize,1,1,1),dtype='f')
-  batchtokens=np.zeros((batchsize,windowsize),dtype='i')
-
-  for line in inputfile:
-    yx=[word for word in line.split('\t')]
-
-    tokens=yx[1].split(' ')
-
-    if (len(tokens) < windowsize):
-      continue
-
-    tokstart=random.randint(0,len(tokens)-windowsize)
-
-    for ii in range(windowsize):
-      batchtokens[bindex,ii]=int(tokens[tokstart+ii])
-      comboinputs[bindex,ii*embedd:(ii+1)*embedd,0,0]=embedding[:,int(tokens[tokstart+ii])]
-
-    comboinputs[bindex,(windowsize*embedd):-1,0,0]=0
-    for l in yx[0].split(','):
-      comboinputs[bindex,(windowsize*embedd)+int(l)-1,0,0]=1
-
-    bindex+=1
-
-    if bindex >= batchsize:
-      solver.net.set_input_arrays(comboinputs,bogus)
-      res=solver.net.forward()
-      sumloss+=res['loss']
-      sumsinceloss+=res['loss']
-      solver.net.backward()
-      data_diff=solver.net.blobs['data'].diff.reshape(batchsize,windowsize*embedd+numtags,1,1)
-
-      momembeddiff*=alpha;
-      for ii in range(batchsize):
-        for jj in range(windowsize):
+  with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
+    comboinputs=np.zeros((batchsize,windowsize*embedd+numtags,1,1),dtype='f')
+    bogus=np.zeros((batchsize,1,1,1),dtype='f')
+    batchtokens=np.zeros((batchsize,windowsize),dtype='i')
+  
+    for line in inputfile:
+      yx=[word for word in line.split('\t')]
+  
+      tokens=yx[1].split(' ')
+  
+      if (len(tokens) < windowsize):
+        continue
+  
+      tokstart=random.randint(0,len(tokens)-windowsize)
+  
+      for ii in range(windowsize):
+        batchtokens[bindex,ii]=int(tokens[tokstart+ii])
+        comboinputs[bindex,ii*embedd:(ii+1)*embedd,0,0]=embedding[:,int(tokens[tokstart+ii])]
+  
+      comboinputs[bindex,(windowsize*embedd):-1,0,0]=0
+      for l in yx[0].split(','):
+        comboinputs[bindex,(windowsize*embedd)+int(l)-1,0,0]=1
+  
+      bindex+=1
+  
+      if bindex >= batchsize:
+        solver.net.set_input_arrays(comboinputs,bogus)
+        res=solver.net.forward()
+        sumloss+=res['loss']
+        sumsinceloss+=res['loss']
+        solver.net.backward()
+        data_diff=solver.net.blobs['data'].diff.reshape(batchsize,windowsize*embedd+numtags,1,1)
+  
+        momembeddiff*=alpha;
+        for ii in range(batchsize):
+          for jj in range(windowsize):
             momembeddiff[:,batchtokens[ii,jj]]+=lrs['embedding']*eta*data_diff[ii,jj*embedd:(jj+1)*embedd,0,0]
-      embedding-=momembeddiff
-      embedding*=(1-lrs['embedding']*weightdecay*eta)
+        embedding-=momembeddiff
+        embedding*=(1-lrs['embedding']*weightdecay*eta)
+  
+        for (name,layer,momlayer) in zip(solver.net._layer_names,solver.net.layers,solver.test_nets[0].layers): 
+           blobnum=0 
+           for (blob,momblob) in zip(layer.blobs,momlayer.blobs): 
+             myeta=lrs[(name,blobnum)]*eta 
+             momblob.data[:]*=alpha
+             momblob.data[:]+=myeta*blob.diff
+             blob.data[:]-=momblob.data[:] 
+             blob.data[:]*=(1-weightdecay*myeta)
+             blobnum=blobnum+1 
+  
+        eta=eta*etadecay
+        bindex=0
+        numupdates+=1
+        numsinceupdates+=1
+        if numupdates >= nextprint:
+          try:
+            os.remove(netfilename+"."+str(numupdates)) 
+          except:
+            pass
+            
+          solver.net.save(netfilename+"."+str(numupdates)) 
+          try:
+            os.remove(embeddingfilename+"."+str(numupdates)) 
+          except:
+            pass
+            
+          h5f=h5py.File(embeddingfilename+"."+str(numupdates)) 
+          h5f.create_dataset('embedding',data=embedding) 
+          h5f.close() 
+          now=time.time() 
+          print "%7s\t%8.3f\t%8.3f\t%7s\t%11.6g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),eta) 
+          nextprint=2*nextprint 
+          numsinceupdates=0 
+          sumsinceloss=0 
 
-      for (name,layer,momlayer) in zip(solver.net._layer_names,solver.net.layers,solver.test_nets[0].layers): 
-         blobnum=0 
-         for (blob,momblob) in zip(layer.blobs,momlayer.blobs): 
-           myeta=lrs[(name,blobnum)]*eta 
-           momblob.data[:]*=alpha
-           momblob.data[:]+=myeta*blob.diff
-           blob.data[:]-=momblob.data[:] 
-           blob.data[:]*=(1-weightdecay*myeta)
-           blobnum=blobnum+1 
 
-      eta=eta*etadecay
-      bindex=0
-      numupdates+=1
-      numsinceupdates+=1
-      if numupdates >= nextprint:
-        try:
-          os.remove(netfilename+"."+str(numupdates)) 
-        except:
-          pass
-          
-        solver.net.save(netfilename+"."+str(numupdates)) 
-        try:
-          os.remove(embeddingfilename+"_e."+str(numupdates)) 
-        except:
-          pass
-          
-        h5f=h5py.File(embeddingfilename+"_e."+str(numupdates)) 
-        h5f.create_dataset('embedding',data=embedding) 
-        h5f.close() 
-        now=time.time() 
-        print "%7s\t%8.3f\t%8.3f\t%7s\t%11.6g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),eta) 
-        nextprint=2*nextprint 
-        numsinceupdates=0 
-        sumsinceloss=0 
+solver.net.save(netfilename)
+h5f=h5py.File(embeddingfilename);
+h5f.create_dataset('embedding',data=embedding) 
+h5f.close() 
+now=time.time() 
+print "%7s\t%8.3f\t%8.3f\t%7s\t%11.6g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),eta) 
