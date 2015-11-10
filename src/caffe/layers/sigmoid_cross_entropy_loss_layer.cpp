@@ -1,7 +1,10 @@
+#include <algorithm>
+#include <cfloat>
 #include <vector>
 
-#include "caffe/loss_layers.hpp"
+#include "caffe/layer.hpp"
 #include "caffe/util/math_functions.hpp"
+#include "caffe/vision_layers.hpp"
 
 namespace caffe {
 
@@ -23,6 +26,7 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Reshape(
   CHECK_EQ(bottom[0]->count(), bottom[1]->count()) <<
       "SIGMOID_CROSS_ENTROPY_LOSS layer inputs must have the same count.";
   sigmoid_layer_->Reshape(sigmoid_bottom_vec_, sigmoid_top_vec_);
+  loss_data_.ReshapeLike(*bottom[0]);
 }
 
 template <typename Dtype>
@@ -39,8 +43,7 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Forward_cpu(
   const Dtype* target = bottom[1]->cpu_data();
   Dtype loss = 0;
   for (int i = 0; i < count; ++i) {
-    loss -= input_data[i] * (target[i] - (input_data[i] >= 0)) -
-        log(1 + exp(input_data[i] - 2 * input_data[i] * (input_data[i] >= 0)));
+    loss -= -input_data[i] * (1 - target[i]) - log(1 + exp(-input_data[i]));
   }
   top[0]->mutable_cpu_data()[0] = loss / num;
 }
@@ -68,7 +71,7 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Backward_cpu(
 }
 
 #ifdef CPU_ONLY
-STUB_GPU_BACKWARD(SigmoidCrossEntropyLossLayer, Backward);
+STUB_GPU(SigmoidCrossEntropyLossLayer);
 #endif
 
 INSTANTIATE_CLASS(SigmoidCrossEntropyLossLayer);

@@ -1,6 +1,7 @@
 import bz2
 import caffe
 from caffe import layers as L
+from caffe import params as P
 import h5py
 import math
 import numpy as np
@@ -10,30 +11,46 @@ import sys
 import time
 from scipy.sparse import csr_matrix
 
+import pdb
+
 random.seed(69)
 np.random.seed(8675309)
 
-numtags=13039
+maxtags=13039
+numtags=10
 numtokens=260544
 windowsize=10
 embedd=300
-batchsize=3000
+batchsize=3001
 
-alpha=0.9 
+alpha=0.0
 eta=1e-3
-etadecay=0.999
-weightdecay=1e-5 
+etadecay=0.9999
+weightdecay=1e-6
 
 lrs=dict()
-lrs['embedding']=0.1
+lrs['embedding']=1
+lrs[('conv1',0)]=1
+lrs[('conv1',1)]=2
+lrs[('conv2',0)]=1
+lrs[('conv2',1)]=2
+lrs[('conv3',0)]=1
+lrs[('conv3',1)]=2
 lrs[('lastip',0)]=1
-lrs[('lastip',1)]=0.1
+lrs[('lastip',1)]=0
 
 def net(batchsize,embedd,windowsize,numtags):
   n = caffe.NetSpec()
   n.data, n.bogus = L.MemoryData(batch_size=batchsize, channels=(windowsize*embedd+numtags), height=1, width=1, ntop=2)
-  n.features, n.labels = L.Slice(n.data,slice_param=dict(axis=1,slice_point=[windowsize*embedd]),ntop=2)
-  n.lastip = L.InnerProduct(n.features, num_output=numtags)
+  n.prefeatures, n.labels = L.Slice(n.data, slice_param=dict(axis=1,slice_point=[windowsize*embedd]),ntop=2)
+  n.features = L.Reshape(n.prefeatures, reshape_param=dict(shape=dict(dim=[0,embedd,1,windowsize])))
+  n.conv1 = L.Convolution(n.features, num_output=100, kernel_h=1, kernel_w=3)
+  n.pool1 = L.Pooling(n.conv1, kernel_h=1, kernel_w=2, stride=1, pool=P.Pooling.MAX)
+  n.conv2 = L.Convolution(n.pool1, num_output=100, kernel_h=1, kernel_w=3)
+  n.pool2 = L.Pooling(n.conv2, kernel_h=1, kernel_w=2, stride=1, pool=P.Pooling.MAX)
+  n.conv3 = L.Convolution(n.pool2, num_output=100, kernel_h=1, kernel_w=3)
+  n.pool3 = L.Pooling(n.conv3, kernel_h=1, kernel_w=2, stride=1, pool=P.Pooling.MAX)
+  n.lastip = L.InnerProduct(n.pool3, num_output=numtags)
   n.loss = L.SigmoidCrossEntropyLoss(n.lastip, n.labels)
   n.silence = L.Silence(n.bogus,ntop=0)
   return n.to_proto()
@@ -73,14 +90,53 @@ with open(protofilename,'w') as f:
 caffe.set_mode_gpu()
 solver = caffe.SGDSolver('pretrain_solver.prototxt')
 
-for (layer,momlayer) in zip(solver.net.layers,solver.test_nets[0].layers):
+for (name,layer,momlayer) in zip(solver.net._layer_names,solver.net.layers,solver.test_nets[0].layers):
   blobnum=0 
   for (blob,momblob) in zip(layer.blobs,momlayer.blobs):
     if blobnum == 0:
       blob.data[:]=0.1/math.sqrt(blob.data.shape[-1])*np.random.standard_normal(size=blob.data.shape)
     else:
-      blob.data[:]=-7
+      blob.data[:]=0
     momblob.data[:]=np.zeros(blob.data.shape,dtype='f')
+    blobnum=blobnum+1 
+
+labelcounts=np.zeros(maxtags,dtype='d')
+examplecount=0
+
+try:
+  with open('pretrain.labelcounts.txt', 'r') as f:
+    print "using precomputed label counts"
+    for line in f:
+      lc=[word for word in line.split('\t')]
+      labelcounts[int(lc[0])]=float(lc[1])
+except:
+  print "computing label counts"
+  with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
+    for line in inputfile:
+      yx=[word for word in line.split('\t')]
+  
+      tokens=yx[1].split(' ')
+  
+      if (len(tokens) < windowsize):
+        continue
+  
+      for l in yx[0].split(','):
+        labelcounts[int(l)-1]+=1
+  
+      examplecount+=1
+
+  labelcounts=(1+labelcounts)/examplecount
+
+  print "saving label counts"
+  with open('pretrain.labelcounts.txt', 'w') as f:
+    for ii in range(maxtags):
+      f.write('%u\t%g\n'%(ii,labelcounts[ii]))
+
+for (name,layer) in zip(solver.net._layer_names,solver.net.layers):
+  blobnum=0 
+  for blob in layer.blobs:
+    if name == "lastip" and blobnum == 1:
+      blob.data[:]=np.log(np.divide(labelcounts[0:numtags],1-labelcounts[0:numtags]))
     blobnum=blobnum+1 
 
 embedding=(1.0/math.sqrt(embedd))*np.random.standard_normal(size=(embedd,numtokens+1)).astype(float)
@@ -100,12 +156,12 @@ sumloss=0
 sumsinceloss=0 
 nextprint=1 
 
-for passes in range(2):
-  with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
-    comboinputs=np.zeros((batchsize,windowsize*embedd+numtags,1,1),dtype='f')
-    bogus=np.zeros((batchsize,1,1,1),dtype='f')
-    batchtokens=np.zeros((batchsize,windowsize),dtype='i')
+comboinputs=np.zeros((batchsize,windowsize*embedd+numtags,1,1),dtype='f')
+bogus=np.zeros((batchsize,1,1,1),dtype='f')
+batchtokens=np.zeros((batchsize,windowsize),dtype='i')
   
+for passes in range(64):
+  with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
     for line in inputfile:
       yx=[word for word in line.split('\t')]
   
@@ -120,9 +176,10 @@ for passes in range(2):
         batchtokens[bindex,ii]=int(tokens[tokstart+ii])
         comboinputs[bindex,ii*embedd:(ii+1)*embedd,0,0]=embedding[:,int(tokens[tokstart+ii])]
   
-      comboinputs[bindex,(windowsize*embedd):-1,0,0]=0
+      comboinputs[bindex,(windowsize*embedd):,0,0]=0
       for l in yx[0].split(','):
-        comboinputs[bindex,(windowsize*embedd)+int(l)-1,0,0]=1
+        if int(l) <= numtags:
+          comboinputs[bindex,(windowsize*embedd)+int(l)-1,0,0]=1
   
       bindex+=1
   
@@ -131,6 +188,7 @@ for passes in range(2):
         res=solver.net.forward()
         sumloss+=res['loss']
         sumsinceloss+=res['loss']
+        saveresloss=res['loss']+0
         solver.net.backward()
         data_diff=solver.net.blobs['data'].diff.reshape(batchsize,windowsize*embedd+numtags,1,1)
   
@@ -150,7 +208,7 @@ for passes in range(2):
              blob.data[:]-=momblob.data[:] 
              blob.data[:]*=(1-weightdecay*myeta)
              blobnum=blobnum+1 
-  
+
         eta=eta*etadecay
         bindex=0
         numupdates+=1
@@ -178,6 +236,10 @@ for passes in range(2):
 
 
 solver.net.save(netfilename)
+try:
+  os.remove(embeddingfilename)
+except:
+  pass
 h5f=h5py.File(embeddingfilename);
 h5f.create_dataset('embedding',data=embedding) 
 h5f.close() 
@@ -185,17 +247,23 @@ now=time.time()
 print "%7s\t%8.3f\t%8.3f\t%7s\t%11.6g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),eta) 
 
 # GLOG_minloglevel=5 PYTHONPATH=../../python python ./pretrain.py
+# using precomputed label counts
 # delta t  average           since        example    learning
 #             loss            last        counter        rate
-#  5.388s   22.500          22.500             3K    0.000999
-# 10.530s   22.767          23.034             6K    0.000998
-# 19.621s   22.911          23.056            12K    0.000996
-# 36.058s   22.763          22.616            24K    0.000992
-#  1.129m   22.694          22.624            48K   0.0009841
-#  2.196m   22.737          22.779            96K   0.0009685
-#  4.297m   22.626          22.515           192K    0.000938
-#  8.444m   22.460          22.295           384K   0.0008798
-# 16.645m   22.246          22.031           768K    0.000774
-# 33.006m   22.167          22.089             1M   0.0005991
-#
-# (stopped, somewhat flass)
+#  1.748s    0.938           0.938             3K   0.0009999
+#  3.424s    0.937           0.936             6K   0.0009998
+#  6.166s    0.930           0.924            12K   0.0009996
+# 11.586s    0.929           0.927            24K   0.0009992
+# 21.124s    0.921           0.912            48K   0.0009984
+# 38.372s    0.919           0.917            96K   0.0009968
+#  1.222m    0.915           0.912           192K   0.0009936
+#  2.299m    0.916           0.917           384K   0.0009873
+#  4.456m    0.917           0.918           768K   0.0009747
+#  8.690m    0.918           0.920             1M   0.0009501
+# 17.426m    0.917           0.915             3M   0.0009027
+# 34.364m    0.908           0.899             6M   0.0008148
+#  1.140h    0.892           0.876            12M   0.0006639
+#  2.272h    0.870           0.848            24M   0.0004408
+#  4.537h    0.847           0.825            49M   0.0001943
+#  9.085h    0.830           0.812            98M   3.774e-05
+# ...
