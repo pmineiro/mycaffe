@@ -8,7 +8,13 @@ namespace caffe {
 template <typename Dtype>
 __global__ void SigmoidForward(const int n, const Dtype* in, Dtype* out) {
   CUDA_KERNEL_LOOP(index, n) {
-    out[index] = 1. / (1. + exp(-in[index]));
+    if (in[index] < 0) {
+      Dtype v = exp(in[index]);
+      out[index] = v / (Dtype (1) + v);
+    } 
+    else {
+      out[index] = Dtype(1) / (Dtype(1) + exp(-in[index]));
+    }
   }
 }
 

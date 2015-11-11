@@ -9,7 +9,7 @@ tokencutoff=100
 
 all: 
 
-pretrain.model: pretrain.py pretrain.bz2
+pretrain.model: pretrain.py pretrain.bz2 tokencooc.bz2
 	@rm -f $(wildcard pretrain.model.* pretrain.embedding.h5f_e.*)
 	GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
 
@@ -38,9 +38,12 @@ taghisto: enwiki-20150901.id2cat.txt.bz2
 tokenhisto: text/AA/wiki_00.bz2 maketokenhisto.pl
 	bzcat $(word 1,$^) | perl ./$(word 2,$^) > $@
 
+tokencooc.bz2: text/AA/wiki_00.bz2 maketokencooc.pl tokenhisto
+	bzcat $(word 1,$^) | perl ./$(word 2,$^) $(word 3,$^) $(tokencutoff) | bzip2 > $@
+
 pretrain.bz2: seed=69
-pretrain.bz2: makepretrain.pl taghisto enwiki-20150901.id2cat.txt.bz2 tokenhisto text/AA/wiki_00.bz2
-	perl ./$(word 1,$^) $(word 2,$^) $(tagcutoff) <(bzcat $(word 3,$^)) $(word 4,$^) $(tokencutoff) <(bzcat $(word 5,$^)) | \
+pretrain.bz2: makepretrain.pl taghisto enwiki-20150901.id2cat.txt.bz2 tokenhisto text/AA/wiki_00.bz2 
+	bzcat $(word 5,$^) | perl ./$(word 1,$^) $(word 2,$^) $(tagcutoff) <(bzcat $(word 3,$^)) $(word 4,$^) $(tokencutoff) | \
 	perl -pe 'BEGIN { srand $(seed); } $$_=rand()."\t$$_"' | \
 	sort -S50% -t$$'\t' -k1,1n | \
 	cut -d$$'\t' -f2- | bzip2 > $@

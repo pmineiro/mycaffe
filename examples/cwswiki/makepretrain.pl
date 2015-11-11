@@ -5,7 +5,6 @@ use strict;
 
 use IO::File;
 use Digest::MD5 qw (md5_hex);
-use Data::Dumper;
 
 local $\="\n";
 
@@ -14,12 +13,10 @@ my $tagcutoff = shift @ARGV or die;
 my $id2catfile = shift @ARGV or die;
 my $tokenhistofile = shift @ARGV or die;
 my $tokencutoff = shift @ARGV or die;
-my $dumpfile = shift @ARGV or die;
 
 my $taghistofh = new IO::File $taghistofile, "r" or die "$taghistofile: $!";
 my $idtocatfh = new IO::File $id2catfile or die "$id2catfile: $!";
 my $tokenhistofh = new IO::File $tokenhistofile, "r" or die "$tokenhistofile: $!";
-my $dumpfh = new IO::File $dumpfile or die "$dumpfile: $!";
 
 my %tags;
 
@@ -70,7 +67,7 @@ my %nocat;
 my $shortpara = 0;
 my $shortsentence = 0;
 
-while (defined ($_ = <$dumpfh>))
+while (defined ($_ = <>))
   {
     chomp;
 

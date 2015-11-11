@@ -7,7 +7,13 @@ namespace caffe {
 
 template <typename Dtype>
 inline Dtype sigmoid(Dtype x) {
-  return 1. / (1. + exp(-x));
+  if (x < 0) {
+    Dtype v = exp (x);
+    return v / (Dtype (1) + v);
+  }
+  else {
+    return Dtype(1) / (Dtype(1) + exp(-x));
+  }
 }
 
 template <typename Dtype>

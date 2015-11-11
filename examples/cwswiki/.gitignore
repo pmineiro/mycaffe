@@ -1,4 +1,5 @@
 pretrain.prototxt
+pretrain.labelcounts.txt
 *.bz2
 *histo
 *.embedding*
