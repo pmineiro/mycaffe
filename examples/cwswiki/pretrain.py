@@ -71,6 +71,12 @@ def nicecount(n):
   else: 
     return "%4uB"%(n/(1000*1000*1000)) 
 
+def nicediv(a,b):
+  if (b == 0):
+    return "%7s"%("n/a")
+  else:
+    return "%7.3f"%(a/b)
+
 #-------------------------------------------------
 # define model
 #-------------------------------------------------
@@ -162,28 +168,6 @@ for (name,layer) in zip(solver.net._layer_names,solver.net.layers):
       blob.data[:]=np.log(np.divide(labelcounts[0:numtags],1-labelcounts[0:numtags]))
     blobnum=blobnum+1 
 
-## hellinger pca
-#
-#row=[]
-#col=[]
-#val=[]
-#with bz2.BZ2File('tokencooc.bz2', 'rb') as f:
-#  for line in f:
-#    lc=[word for word in line.split('\t')]
-#    for cooc in lc[1:]:
-#      indc=[word for word in cooc.split(':')]
-#      row.append(int(lc[0]));
-#      col.append(int(indc[0]));
-#      val.append(float(indc[1]));
-#
-#  pdb.set_trace()
-#  X=csr_matrix(val,(row,col),shape=(max(row),max(col)),dtype='d')
-#  pdb.set_trace()
-#  XtX=X*X.transpose().todense()
-#  pdb.set_trace()
-#  S,V=np.linalg.eigh(XtX)
-#  pdb.set_trace()
-
 embedding=(1.0/math.sqrt(embedd))*np.random.standard_normal(size=(embedd,numtokens+1)).astype(float)
 momembeddiff=np.zeros(shape=(embedd,numtokens+1),dtype='f')
 
@@ -194,8 +178,8 @@ momembeddiff=np.zeros(shape=(embedd,numtokens+1),dtype='f')
 sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0) 
 sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0) 
  
-print "%7s\t%8s\t%8s\t%7s\t%4s\t%11s"%("delta t","average","since","example","pass","learning") 
-print "%7s\t%8s\t%8s\t%7s\t%4s\t%11s"%("","loss","last","counter","num","rate") 
+print "%7s\t%7s\t%7s\t%7s\t%7s\t%4s\t%11s"%("delta t","average","since","holdout","example","pass","learning") 
+print "%7s\t%7s\t%7s\t%7s\t%7s\t%4s\t%11s"%("","loss","last","loss","counter","num","rate") 
 
 bindex=0
 start=time.time()
@@ -210,6 +194,9 @@ bogus=np.zeros((batchsize,1,1,1),dtype='f')
 batchtokens=np.zeros((batchsize,windowsize),dtype='i')
   
 for passes in range(64):
+  batchnum=0
+  sumholdoutloss=0
+  numholdoutupdates=0
   with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
     for line in inputfile:
       yx=[word for word in line.split('\t')]
@@ -237,33 +224,41 @@ for passes in range(64):
         res=solver.net.forward()
         sumloss+=res['loss']
         sumsinceloss+=res['loss']
-        saveresloss=res['loss']+0
-        solver.net.backward()
-        data_diff=solver.net.blobs['data'].diff.reshape(batchsize,windowsize*embedd+numtags,1,1)
 
-        # TODO: scale learning rate by token frequency ...
-  
-        momembeddiff*=alpha;
-        for ii in range(batchsize):
-          for jj in range(windowsize):
-            momembeddiff[:,batchtokens[ii,jj]]+=lrs['embedding']*eta*data_diff[ii,jj*embedd:(jj+1)*embedd,0,0]
-        embedding-=momembeddiff
-        embedding*=(1-lrs['embedding']*weightdecay*eta)
-  
-        for (name,layer,momlayer) in zip(solver.net._layer_names,solver.net.layers,momsolver.net.layers):
-           blobnum=0 
-           for (blob,momblob) in zip(layer.blobs,momlayer.blobs): 
-             myeta=lrs[(name,blobnum)]*eta 
-             momblob.data[:]*=alpha
-             momblob.data[:]+=myeta*blob.diff
-             blob.data[:]-=momblob.data[:] 
-             blob.data[:]*=(1-weightdecay*myeta)
-             blobnum=blobnum+1 
+        batchnum+=1
 
-        eta=eta*etadecay
+        if passes > 0 and batchnum % 16 == 0:
+          sumholdoutloss+=res['loss']
+          numholdoutupdates+=1
+        else:
+          solver.net.backward()
+          data_diff=solver.net.blobs['data'].diff.reshape(batchsize,windowsize*embedd+numtags,1,1)
+
+          # TODO: scale learning rate by token frequency ...
+  
+          momembeddiff*=alpha
+          for ii in range(batchsize):
+            for jj in range(windowsize):
+              momembeddiff[:,batchtokens[ii,jj]]+=lrs['embedding']*eta*data_diff[ii,jj*embedd:(jj+1)*embedd,0,0]
+          embedding-=momembeddiff
+          embedding*=(1-weightdecay*lrs['embedding']*eta)
+  
+          for (name,layer,momlayer) in zip(solver.net._layer_names,solver.net.layers,momsolver.net.layers):
+             blobnum=0 
+             for (blob,momblob) in zip(layer.blobs,momlayer.blobs): 
+               myeta=lrs[(name,blobnum)]*eta 
+               momblob.data[:]*=alpha
+               momblob.data[:]+=myeta*blob.diff
+               blob.data[:]-=momblob.data
+               blob.data[:]*=(1-weightdecay*myeta)
+               blobnum=blobnum+1 
+
+          eta=eta*etadecay
+
         bindex=0
         numupdates+=1
         numsinceupdates+=1
+
         if numupdates >= nextprint:
           try:
             os.remove(netfilename+"."+str(numupdates)) 
@@ -280,7 +275,7 @@ for passes in range(64):
           h5f.create_dataset('embedding',data=embedding) 
           h5f.close() 
           now=time.time() 
-          print "%7s\t%8.3f\t%8.3f\t%7s\t%4u\t%11.4g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,eta) 
+          print "%7s\t%7.3f\t%7.3f\t%7s\t%7s\t%4u\t%11.4g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicediv(sumholdoutloss,numholdoutupdates),nicecount(numupdates*batchsize),passes,eta) 
           nextprint=2*nextprint 
           numsinceupdates=0 
           sumsinceloss=0 
@@ -295,25 +290,23 @@ h5f=h5py.File(embeddingfilename);
 h5f.create_dataset('embedding',data=embedding) 
 h5f.close() 
 now=time.time() 
-print "%7s\t%8.3f\t%8.3f\t%7s\t%4u\t%11.6g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,eta) 
+print "%7s\t%7.3f\t%7.3f\t%7s\t%7s\t%4u\t%11.6g"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicediv(sumholdoutloss,numholdoutupdates),nicecount(numupdates*batchsize),passes,eta) 
 
 # GLOG_minloglevel=5 PYTHONPATH=../../python python ./pretrain.py
 # using precomputed label counts
-# delta t  average           since        example pass       learning
-#             loss            last        counter  num           rate
-#  1.891s    0.938           0.938           3001    0      0.0009999
-#  3.663s    0.937           0.937           6002    0      0.0009998
-#  6.529s    0.931           0.924            12K    0      0.0009996
-# 11.384s    0.929           0.927            24K    0      0.0009992
-# 20.341s    0.921           0.912            48K    0      0.0009984
-# 37.720s    0.919           0.917            96K    0      0.0009968
-#  1.179m    0.916           0.912           192K    0      0.0009936
-#  2.279m    0.916           0.916           384K    0      0.0009873
-#  4.425m    0.917           0.917           768K    0      0.0009747
-#  8.702m    0.918           0.919          1536K    0      0.0009501
-# 17.273m    0.914           0.910          3073K    1      0.0009027
-# 34.322m    0.902           0.889          6146K    2      0.0008148
-#  1.142h    0.885           0.869            12M    5      0.0006639
-#  2.281h    0.863           0.841            24M   11      0.0004408
-#  4.555h    0.841           0.818            49M   23      0.0001943
+# delta t average   since holdout example pass       learning
+#            loss    last    loss counter  num           rate
+#  1.861s   0.938   0.938     n/a    3001    0      0.0009999
+#  3.625s   0.937   0.937     n/a    6002    0      0.0009998
+#  6.465s   0.931   0.924     n/a     12K    0      0.0009996
+# 11.262s   0.929   0.927     n/a     24K    0      0.0009992
+# 20.029s   0.921   0.912     n/a     48K    0      0.0009984
+# 37.021s   0.919   0.917     n/a     96K    0      0.0009968
+#  1.176m   0.916   0.912     n/a    192K    0      0.0009936
+#  2.248m   0.916   0.916     n/a    384K    0      0.0009873
+#  4.380m   0.917   0.917     n/a    768K    0      0.0009747
+#  8.596m   0.918   0.919     n/a   1536K    0      0.0009501
+# 16.815m   0.915   0.911   0.911   3073K    1      0.0009044
+# 33.082m   0.904   0.893   0.888   6146K    2      0.0008216
+#  1.089h   0.888   0.873   0.872     12M    5       0.000678
 # ...
