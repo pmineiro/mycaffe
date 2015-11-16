@@ -10,7 +10,7 @@ tokencutoff=100
 all: 
 
 pretrain.model: pretrain.py pretrain.bz2 tokencooc.bz2
-	@rm -f $(wildcard pretrain.model.* pretrain.embedding.h5f_e.*)
+	@rm -f $(wildcard pretrain.model.* pretrain.embedding.h5f.*)
 	GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
 
 #------------------------------------------------
