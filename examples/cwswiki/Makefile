@@ -29,6 +29,15 @@ enwiki-20150901-pages-articles-multistream.xml.bz2:
 text/AA/wiki_00.bz2: WikiExtractor.py enwiki-20150901-pages-articles-multistream.xml.bz2
 	python ./WikiExtractor.py --no-templates --bytes 100G -c <(bzcat enwiki-20150901-pages-articles-multistream.xml.bz2)
 
+text/AA/wiki_00.shuf.bz2: text/AA/wiki_00.bz2
+	bzcat $< |							\
+	  perl -ne 'BEGIN { srand 69; $$/="</doc>\n"; }; 		\
+	            1; $$r = rand (); print "$$r\001$$_\000";' |	\
+	  sort -k1n -t$$'\001' -z -S50% --compress-program=lzop | 	\
+	  perl -F'\001' -ane 'BEGIN { $$/="\000"; }; 			\
+	                      1; chomp($$F[1]); print $$F[1]' |		\
+	  bzip2 > $@
+
 taghisto: enwiki-20150901.id2cat.txt.bz2
 	bzcat $< | \
 	perl -F'\t' -lane \
