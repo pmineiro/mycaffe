@@ -1,18 +1,18 @@
 SHELL=/bin/zsh
 
-tagcutoff=150
-tokencutoff=100
-windowsize=10
-embedd=300
-batchsize=5001
-numconvk=100
-alpha=0.0
-eta=1e-3
-etadecay=0.999
-weightdecay=1e-6
-labelnoise=1e-6
-numtags=100
-maxshufbuf=100000
+export tagcutoff=150
+export tokencutoff=100
+export windowsize=10
+export embedd=300
+export batchsize=5001
+export numconvk=100
+export alpha=0.0
+export eta=1e-3
+export etadecay=0.999
+export weightdecay=1e-6
+export labelnoise=1e-6
+export numtags=100
+export maxshufbuf=100000
 
 .SECONDARY: 
 
@@ -22,7 +22,10 @@ all:
 
 pretrain.model: pretrain.py tokenhisto taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2
 	@rm -f $(wildcard pretrain.model.* pretrain.embedding.h5f.*)
-	@MAXSHUFBUF=$(maxshufbuf) NUMTAGS=$(numtags) ALPHA=$(alpha) ETA=$(eta) ETADECAY=$(etadecay) WEIGHTDECAY=$(weightdecay) LABELNOISE=$(labelnoise) WINDOWSIZE=$(windowsize) EMBEDD=$(embedd) BATCHSIZE=$(batchsize) NUMCONVK=$(numconvk) TAGCUTOFF=$(tagcutoff) TOKENCUTOFF=$(tokencutoff) GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
+	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
+
+prevalidate: prevalidate.py tokenhisto taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2 pretrain.model
+	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
 
 #------------------------------------------------
 # preprocessing stuff

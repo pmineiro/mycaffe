@@ -19,28 +19,26 @@ from Pretty import nicetime, nicecount
 sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0) 
 sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0) 
 
-tagcutoff=int(os.environ['TAGCUTOFF'])
-tokencutoff=int(os.environ['TOKENCUTOFF'])
-windowsize=int(os.environ['WINDOWSIZE'])
-embedd=int(os.environ['EMBEDD'])
-batchsize=int(os.environ['BATCHSIZE'])
-numconvk=int(os.environ['NUMCONVK'])
-alpha=float(os.environ['ALPHA'])
-eta=float(os.environ['ETA'])
-etadecay=float(os.environ['ETADECAY'])
-weightdecay=float(os.environ['WEIGHTDECAY'])
-labelnoise=float(os.environ['LABELNOISE'])
-numtags=int(os.environ['NUMTAGS'])
-maxshufbuf=int(os.environ['MAXSHUFBUF'])
+tagcutoff=int(os.environ['tagcutoff'])
+tokencutoff=int(os.environ['tokencutoff'])
+windowsize=int(os.environ['windowsize'])
+embedd=int(os.environ['embedd'])
+batchsize=int(os.environ['batchsize'])
+numconvk=int(os.environ['numconvk'])
+alpha=float(os.environ['alpha'])
+eta=float(os.environ['eta'])
+etadecay=float(os.environ['etadecay'])
+weightdecay=float(os.environ['weightdecay'])
+labelnoise=float(os.environ['labelnoise'])
+numtags=int(os.environ['numtags'])
+maxshufbuf=int(os.environ['maxshufbuf'])
 
 #-------------------------------------------------
 # which ids to use for pretraining
 #-------------------------------------------------
 
 def pretrainfilter(idnum):
-  md5 = hashlib.md5()
-  md5.update (idnum)
-  return md5.hexdigest ()[-1] == "a"
+  return hashlib.md5(idnum).hexdigest()[-1] == "a"
 
 #-------------------------------------------------
 # read token information
@@ -87,12 +85,11 @@ except exceptions.IOError:
   with bz2.BZ2File('enwiki-20150901.id2cat.txt.bz2', 'rb') as f:
     for line in f:
       idtags=line.split('\t')
-      if pretrainfilter (idtags[0]):
-        goodtags=[]
-        for tag in idtags[1:]:
-          if tag in tagnum:
-            goodtags.append(tagnum[tag])
-        id2cat[int(idtags[0])]=goodtags
+      goodtags=[]
+      for tag in idtags[1:]:
+        if tag in tagnum:
+          goodtags.append(tagnum[tag])
+      id2cat[int(idtags[0])]=goodtags
   with open('id2cat.precomputed.txt','w') as f:
     for key, value in id2cat.iteritems():
       f.write('%u\t%s\n'%(key,'\t'.join([str(v) for v in value])))
@@ -150,7 +147,7 @@ with open(protofilename,'w') as f:
 
 caffe.set_mode_gpu()
 net = caffe.Net(protofilename, caffe.TRAIN)
-if (alpha > 0):
+if alpha > 0:
   momnet = caffe.Net(protofilename, caffe.TRAIN)
 
 #-------------------------------------------------
@@ -171,7 +168,7 @@ except exceptions.IOError:
   sys.stdout.write('computing label counts ...')
 
   for docid, paragraphs in DocGenerator.docs('text/AA/wiki_00.shuf.bz2'):
-    if docid in id2cat:
+    if docid in id2cat and pretrainfilter(str(docid)):
       labels=id2cat[docid]
 
       for s in DocGenerator.sentences(paragraphs):
@@ -204,7 +201,7 @@ for layer in net.layers:
       blob.data[:]=0
     blobnum=blobnum+1 
 
-if (alpha > 0):
+if alpha > 0:
   for layer in momnet.layers:
     for blob in layer.blobs:
       blob.data[:]=0
@@ -217,7 +214,7 @@ for (name,layer) in zip(net._layer_names,net.layers):
     blobnum=blobnum+1 
 
 embedding=(1.0/math.sqrt(embedd))*np.random.standard_normal(size=(embedd,numtokens+1)).astype(float)
-if (alpha > 0):
+if alpha > 0:
   momembeddiff=np.zeros(shape=(embedd,numtokens+1),dtype='f')
 
 params = { 'lrs': lrs, 'net': net, 'embedding': embedding, 
@@ -229,7 +226,7 @@ if alpha > 0:
   params['momnet'] = momnet
   params['momembeddiff'] = momembeddiff
 
-finetuner = CaffeFinetuner.CaffeFinetuner (params)
+finetuner = CaffeFinetuner.CaffeFinetuner(params)
 
 #-------------------------------------------------
 # iterate
@@ -249,7 +246,7 @@ shufbuf=[]
 for passes in range(24):
   batchnum=0
   for docid, paragraphs in DocGenerator.docs('text/AA/wiki_00.shuf.bz2'):
-    if docid in id2cat:
+    if docid in id2cat and pretrainfilter(str(docid)):
       for s in DocGenerator.sentences(paragraphs):
         if len(s) < windowsize:
           continue
@@ -263,10 +260,10 @@ for passes in range(24):
 
           labels=id2cat[dq[1]]
           tokstart=random.randrange(1+len(dq[0])-windowsize)
-          tokens = [ tokennum[t] if t in tokennum else 0 
-                     for t in dq[0][tokstart:tokstart+windowsize] ]
+          tokens=[ tokennum[t] if t in tokennum else 0 
+                   for t in dq[0][tokstart:tokstart+windowsize] ]
 
-          rv = finetuner.update (tokens, labels)
+          rv=finetuner.update(tokens, labels)
     
           if rv[0]:
             sumloss+=rv[1]
@@ -312,18 +309,19 @@ print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/n
 # using precomputed label counts
 # delta t average   since example pass     learning
 #            loss    last counter  num         rate
-# 20.620s   1.596   1.596    5001    0    9.990e-04
-# 23.365s   1.619   1.643     10K    0    9.980e-04
-# 28.489s   1.589   1.559     20K    0    9.960e-04
-# 38.018s   1.619   1.648     40K    0    9.920e-04
-# 58.517s   1.633   1.648     80K    0    9.841e-04
-#  1.597m   1.640   1.646    160K    0    9.685e-04
-#  2.767m   1.599   1.558    320K    0    9.380e-04
-#  5.072m   1.589   1.579    640K    0    8.798e-04
-#  9.646m   1.530   1.472   1280K    0    7.740e-04
-# 18.812m   1.505   1.480   2560K    0    5.991e-04
-# 37.171m   1.471   1.436   5121K    1    3.590e-04
-#  1.202h   1.400   1.329     10M    2    1.289e-04
-#  2.352h   1.333   1.266     20M    4    1.661e-05
-#  4.651h   1.292   1.251     40M    9    2.757e-07
-# ...
+# 20.551s   1.596   1.596    5001    0    9.990e-04
+# 23.321s   1.619   1.643     10K    0    9.980e-04
+# 28.246s   1.589   1.559     20K    0    9.960e-04
+# 37.464s   1.619   1.648     40K    0    9.920e-04
+# 56.239s   1.633   1.648     80K    0    9.841e-04
+#  1.559m   1.640   1.646    160K    0    9.685e-04
+#  2.696m   1.599   1.558    320K    0    9.380e-04
+#  4.990m   1.589   1.579    640K    0    8.798e-04
+#  9.553m   1.530   1.472   1280K    0    7.740e-04
+# 18.567m   1.505   1.480   2560K    0    5.991e-04
+# 35.898m   1.471   1.436   5121K    1    3.590e-04
+#  1.177h   1.400   1.329     10M    2    1.289e-04
+#  2.331h   1.333   1.265     20M    4    1.661e-05
+#  4.636h   1.292   1.251     40M    9    2.757e-07
+#  9.237h   1.271   1.250     81M   18    7.603e-11
+# 11.761h   1.266   1.249    104M   23    8.452e-13

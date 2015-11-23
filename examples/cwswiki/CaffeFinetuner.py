@@ -32,8 +32,6 @@ class CaffeFinetuner:
   def prior (self):
     return self.net.params['lastip'][1].data.reshape(self.numtags)
 
-  # TODO: test this routine ...
-
   def predict (self, parts, labels):
     for n, part in enumerate (parts):
       for pos, t in enumerate (part):
@@ -63,45 +61,46 @@ class CaffeFinetuner:
     if self.bindex >= self.batchsize:
       self.net.set_input_arrays (self.comboinputs, self.bogus)
       res = self.net.forward ()
-      self.net.backward ()
-      data_diff = self.net.blobs['data'].diff.reshape (self.batchsize,self.windowsize*self.embedd+self.numtags,1,1)
+      if self.eta > 0:
+        self.net.backward ()
+        data_diff = self.net.blobs['data'].diff.reshape (self.batchsize,self.windowsize*self.embedd+self.numtags,1,1)
 
-      if self.alpha > 0:
-        self.momembeddiff *= self.alpha
-        for ii in range (self.batchsize):
-          for jj in range (self.windowsize):
-            self.momembeddiff[:,self.batchtokens[ii,jj]] += self.lrs['embedding'] * self.eta * data_diff[ii,jj*self.embedd:(jj+1)*self.embedd,0,0]
-        self.embedding -= self.momembeddiff
-      else:
-        for ii in range (self.batchsize):
-          for jj in range (self.windowsize):
-            self.embedding[:,self.batchtokens[ii,jj]] -= self.lrs['embedding'] * self.eta * data_diff[ii,jj*self.embedd:(jj+1)*self.embedd,0,0]
+        if self.alpha > 0:
+          self.momembeddiff *= self.alpha
+          for ii in range (self.batchsize):
+            for jj in range (self.windowsize):
+              self.momembeddiff[:,self.batchtokens[ii,jj]] += self.lrs['embedding'] * self.eta * data_diff[ii,jj*self.embedd:(jj+1)*self.embedd,0,0]
+          self.embedding -= self.momembeddiff
+        else:
+          for ii in range (self.batchsize):
+            for jj in range (self.windowsize):
+              self.embedding[:,self.batchtokens[ii,jj]] -= self.lrs['embedding'] * self.eta * data_diff[ii,jj*self.embedd:(jj+1)*self.embedd,0,0]
 
-      if self.weightdecay > 0:
-        self.embedding *= (1.0 - self.weightdecay * self.lrs['embedding'] * self.eta)
+        if self.weightdecay > 0:
+          self.embedding *= (1.0 - self.weightdecay * self.lrs['embedding'] * self.eta)
 
-      if self.alpha > 0:
-        for (name,layer,momlayer) in zip (self.net._layer_names,
-                                          self.net.layers,
-                                          self.momnet.layers):
-           blobnum = 0 
-           for (blob,momblob) in zip (layer.blobs,momlayer.blobs): 
-             myeta = self.lrs[(name,blobnum)] * self.eta 
-             momblob.data[:] *= self.alpha
-             momblob.data[:] += myeta * blob.diff
-             blob.data[:] -= momblob.data
-             if self.weightdecay > 0:
-               blob.data[:] *= (1.0 - weightdecay * myeta)
-             blobnum = blobnum + 1 
-      else:
-        for (name,layer) in zip (self.net._layer_names,
-                                 self.net.layers):
-           blobnum = 0 
-           for blob in layer.blobs:
-             myeta = self.lrs[(name,blobnum)] * self.eta 
-             blob.data[:] -= myeta * blob.diff
-             blob.data[:] *= (1.0 - self.weightdecay * myeta)
-             blobnum = blobnum + 1 
+        if self.alpha > 0:
+          for (name,layer,momlayer) in zip (self.net._layer_names,
+                                            self.net.layers,
+                                            self.momnet.layers):
+             blobnum = 0 
+             for (blob,momblob) in zip (layer.blobs,momlayer.blobs): 
+               myeta = self.lrs[(name,blobnum)] * self.eta 
+               momblob.data[:] *= self.alpha
+               momblob.data[:] += myeta * blob.diff
+               blob.data[:] -= momblob.data
+               if self.weightdecay > 0:
+                 blob.data[:] *= (1.0 - weightdecay * myeta)
+               blobnum = blobnum + 1 
+        else:
+          for (name,layer) in zip (self.net._layer_names,
+                                   self.net.layers):
+             blobnum = 0 
+             for blob in layer.blobs:
+               myeta = self.lrs[(name,blobnum)] * self.eta 
+               blob.data[:] -= myeta * blob.diff
+               blob.data[:] *= (1.0 - self.weightdecay * myeta)
+               blobnum = blobnum + 1 
 
       self.bindex = 0
 
