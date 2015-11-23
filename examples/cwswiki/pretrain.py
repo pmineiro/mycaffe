@@ -2,6 +2,8 @@ import bz2
 import caffe
 from caffe import layers as L
 from caffe import params as P
+import exceptions
+import hashlib
 import h5py
 import math
 import numpy as np
@@ -9,25 +11,92 @@ import os
 import random
 import sys
 import time
-from scipy.sparse import csr_matrix
 
 import CaffeFinetuner 
+import DocGenerator
+from Pretty import nicetime, nicecount
 
-import pdb
+sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0) 
+sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0) 
 
-maxtags=13039
-numtags=100
-numtokens=260544
-windowsize=10
-embedd=300
-batchsize=5001
-numconvk=100
+tagcutoff=int(os.environ['TAGCUTOFF'])
+tokencutoff=int(os.environ['TOKENCUTOFF'])
+windowsize=int(os.environ['WINDOWSIZE'])
+embedd=int(os.environ['EMBEDD'])
+batchsize=int(os.environ['BATCHSIZE'])
+numconvk=int(os.environ['NUMCONVK'])
+alpha=float(os.environ['ALPHA'])
+eta=float(os.environ['ETA'])
+etadecay=float(os.environ['ETADECAY'])
+weightdecay=float(os.environ['WEIGHTDECAY'])
+labelnoise=float(os.environ['LABELNOISE'])
+numtags=int(os.environ['NUMTAGS'])
+maxshufbuf=int(os.environ['MAXSHUFBUF'])
 
-alpha=0.0
-eta=1e-3
-etadecay=0.9999
-weightdecay=1e-6
-labelnoise=1e-6
+#-------------------------------------------------
+# which ids to use for pretraining
+#-------------------------------------------------
+
+def pretrainfilter(idnum):
+  md5 = hashlib.md5()
+  md5.update (idnum)
+  return md5.hexdigest ()[-1] == "a"
+
+#-------------------------------------------------
+# read token information
+#-------------------------------------------------
+
+tokennum=dict()
+with open('tokenhisto', 'r') as f:
+  for line in f:
+    tc=line.split('\t')
+    if int(tc[1]) < tokencutoff:
+      break
+    tokennum[tc[0]]=1+len(tokennum)
+
+numtokens = len(tokennum)
+
+#-------------------------------------------------
+# read label (tag) information
+#-------------------------------------------------
+
+tagnum=dict()
+with open('taghisto', 'r') as f:
+  for line in f:
+    tc=line.split('\t')
+    if int(tc[1]) < tagcutoff:
+      break
+    tagnum[tc[0]]=len(tagnum)
+
+maxtags = len(tagnum)
+
+#-------------------------------------------------
+# read id2cat information
+#-------------------------------------------------
+
+id2cat=dict()
+try:
+  with open('id2cat.precomputed.txt','r') as f:
+    print "using precomputed id2cat"
+    for line in f:
+      lc=line.split('\t')
+      id2cat[int(lc[0])]=[int(c) for c in lc[1:] if not c.isspace()]
+except exceptions.IOError:
+  id2catstart=time.time()
+  sys.stdout.write('computing id2cat ...')
+  with bz2.BZ2File('enwiki-20150901.id2cat.txt.bz2', 'rb') as f:
+    for line in f:
+      idtags=line.split('\t')
+      if pretrainfilter (idtags[0]):
+        goodtags=[]
+        for tag in idtags[1:]:
+          if tag in tagnum:
+            goodtags.append(tagnum[tag])
+        id2cat[int(idtags[0])]=goodtags
+  with open('id2cat.precomputed.txt','w') as f:
+    for key, value in id2cat.iteritems():
+      f.write('%u\t%s\n'%(key,'\t'.join([str(v) for v in value])))
+  print " %g seconds.  len(id2cat)  = %d"%(float(time.time()-id2catstart), len(id2cat))
 
 lrs=dict()
 lrs['embedding']=10
@@ -46,32 +115,6 @@ lrs[('lastip',1)]=0
 
 random.seed(69)
 np.random.seed(8675309)
-
-#-------------------------------------------------
-# beautification
-#-------------------------------------------------
-
-def nicetime(dt): 
-   if (dt < 1): 
-     return "%4.0fms"%(1000.0*dt) 
-   elif (dt < 60): 
-     return "%2.3fs"%(dt) 
-   elif (dt < 60*60): 
-     return "%2.3fm"%(dt/60) 
-   elif (dt < 60*60*24): 
-     return "%2.3fh"%(dt/(60*60)) 
-   else: 
-     return "%2.4fd"%(dt/(60*60*24)) 
- 
-def nicecount(n): 
-  if (n < 10*1000): 
-    return "%4u"%(n) 
-  elif (n < 10*1000*1000): 
-    return "%4uK"%(n/1000) 
-  elif (n < 10*1000*1000*1000): 
-    return "%4uM"%(n/(1000*1000)) 
-  else: 
-    return "%4uB"%(n/(1000*1000*1000)) 
 
 #-------------------------------------------------
 # define model
@@ -106,15 +149,53 @@ with open(protofilename,'w') as f:
   f.write(str(net(batchsize,embedd,windowsize,numtags,numconvk)))
 
 caffe.set_mode_gpu()
-solver = caffe.SGDSolver('pretrain_solver.prototxt')
+net = caffe.Net(protofilename, caffe.TRAIN)
 if (alpha > 0):
-  momsolver = caffe.SGDSolver('pretrain_solver.prototxt')
+  momnet = caffe.Net(protofilename, caffe.TRAIN)
 
 #-------------------------------------------------
-# initialize
+# compute prior for bias
 #-------------------------------------------------
 
-for layer in solver.net.layers:
+labelcounts=np.zeros(maxtags,dtype='d')
+
+try:
+  with open('pretrain.labelcounts.precomputed.txt', 'r') as f:
+    print "using precomputed label counts"
+    for line in f:
+      lc=line.split('\t')
+      labelcounts[int(lc[0])]=float(lc[1])
+except exceptions.IOError:
+  labelcountstart=time.time()
+  examplecount=0
+  sys.stdout.write('computing label counts ...')
+
+  for docid, paragraphs in DocGenerator.docs('text/AA/wiki_00.shuf.bz2'):
+    if docid in id2cat:
+      labels=id2cat[docid]
+
+      for s in DocGenerator.sentences(paragraphs):
+        if len(s) < windowsize:
+          continue
+
+        examplecount+=1
+
+        for l in labels:
+          labelcounts[l]+=1
+
+  labelcounts=(1+labelcounts)/(maxtags+examplecount)
+
+  with open('pretrain.labelcounts.precomputed.txt', 'w') as f:
+    for ii in range(maxtags):
+      f.write('%u\t%g\n'%(ii,labelcounts[ii]))
+
+  print " %g seconds.  examplecount = %d"%(float(time.time()-labelcountstart), examplecount)
+
+#-------------------------------------------------
+# initialize finetuner
+#-------------------------------------------------
+
+for layer in net.layers:
   blobnum=0 
   for blob in layer.blobs:
     if blobnum == 0:
@@ -124,45 +205,11 @@ for layer in solver.net.layers:
     blobnum=blobnum+1 
 
 if (alpha > 0):
-  for layer in momsolver.net.layers:
+  for layer in momnet.layers:
     for blob in layer.blobs:
       blob.data[:]=0
 
-# prior for bias
-
-labelcounts=np.zeros(maxtags,dtype='d')
-examplecount=0
-
-try:
-  with open('pretrain.labelcounts.txt', 'r') as f:
-    print "using precomputed label counts"
-    for line in f:
-      lc=[word for word in line.split('\t')]
-      labelcounts[int(lc[0])]=float(lc[1])
-except:
-  print "computing label counts"
-  with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
-    for line in inputfile:
-      yx=[word for word in line.split('\t')]
-  
-      tokens=yx[1].split(' ')
-  
-      if (len(tokens) < windowsize):
-        continue
-  
-      for l in yx[0].split(','):
-        labelcounts[int(l)-1]+=1
-  
-      examplecount+=1
-
-  labelcounts=(1+labelcounts)/examplecount
-
-  print "saving label counts"
-  with open('pretrain.labelcounts.txt', 'w') as f:
-    for ii in range(maxtags):
-      f.write('%u\t%g\n'%(ii,labelcounts[ii]))
-
-for (name,layer) in zip(solver.net._layer_names,solver.net.layers):
+for (name,layer) in zip(net._layer_names,net.layers):
   blobnum=0 
   for blob in layer.blobs:
     if name == "lastip" and blobnum == 1:
@@ -173,24 +220,21 @@ embedding=(1.0/math.sqrt(embedd))*np.random.standard_normal(size=(embedd,numtoke
 if (alpha > 0):
   momembeddiff=np.zeros(shape=(embedd,numtokens+1),dtype='f')
 
-params = { 'lrs': lrs, 'solver': solver, 'embedding': embedding, 
+params = { 'lrs': lrs, 'net': net, 'embedding': embedding, 
            'windowsize': windowsize, 'embedd': embedd, 'numtags': numtags, 
            'batchsize': batchsize, 'labelnoise': labelnoise, 
            'alpha': alpha, 'eta': eta, 'weightdecay': weightdecay }
 
 if alpha > 0:
-  params['momsolver'] = momsolver
+  params['momnet'] = momnet
   params['momembeddiff'] = momembeddiff
 
 finetuner = CaffeFinetuner.CaffeFinetuner (params)
-                             
+
 #-------------------------------------------------
 # iterate
 #-------------------------------------------------
 
-sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0) 
-sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0) 
- 
 print "%7s\t%7s\t%7s\t%7s\t%4s\t%9s"%("delta t","average","since","example","pass","learning") 
 print "%7s\t%7s\t%7s\t%7s\t%4s\t%9s"%("","loss","last","counter","num","rate") 
 
@@ -200,55 +244,60 @@ numupdates=0
 sumloss=0 
 sumsinceloss=0 
 nextprint=1 
+shufbuf=[]
 
 for passes in range(24):
   batchnum=0
-  with bz2.BZ2File('pretrain.bz2', 'rb') as inputfile:
-    for line in inputfile:
-      yx=[word for word in line.split('\t')]
-  
-      tokens=[int(word) for word in yx[1].split(' ')]
-  
-      if (len(tokens) < windowsize):
-        continue
-  
-      tokstart=random.randint(0,len(tokens)-windowsize)
-      tokens=tokens[tokstart:tokstart+windowsize]
+  for docid, paragraphs in DocGenerator.docs('text/AA/wiki_00.shuf.bz2'):
+    if docid in id2cat:
+      for s in DocGenerator.sentences(paragraphs):
+        if len(s) < windowsize:
+          continue
 
-      labels=[int(word) for word in yx[0].split(',')]
-  
-      rv = finetuner.update (tokens, labels)
+        if len(shufbuf) < maxshufbuf:
+          shufbuf.append((s,docid))
+        else:
+          index=random.randrange(maxshufbuf)
+          dq=shufbuf[index]
+          shufbuf[index]=(s,docid)
 
-      if rv[0]:
-        sumloss+=rv[1]
-        sumsinceloss+=rv[1]
+          labels=id2cat[dq[1]]
+          tokstart=random.randrange(1+len(dq[0])-windowsize)
+          tokens = [ tokennum[t] if t in tokennum else 0 
+                     for t in dq[0][tokstart:tokstart+windowsize] ]
 
-        numupdates+=1
-        numsinceupdates+=1
-        finetuner.eta*=etadecay
+          rv = finetuner.update (tokens, labels)
+    
+          if rv[0]:
+            sumloss+=rv[1]
+            sumsinceloss+=rv[1]
+    
+            numupdates+=1
+            numsinceupdates+=1
+            finetuner.eta*=etadecay
+    
+            if numupdates >= nextprint:
+              try:
+                os.remove(netfilename+"."+str(numupdates)) 
+              except:
+                pass
+                
+              net.save(netfilename+"."+str(numupdates)) 
+              try:
+                os.remove(embeddingfilename+"."+str(numupdates)) 
+              except:
+                pass
+    
+              h5f=h5py.File(embeddingfilename+"."+str(numupdates)) 
+              h5f.create_dataset('embedding',data=embedding) 
+              h5f.close() 
+              now=time.time() 
+              print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
+              nextprint=2*nextprint 
+              numsinceupdates=0 
+              sumsinceloss=0 
 
-        if numupdates >= nextprint:
-          try:
-            os.remove(netfilename+"."+str(numupdates)) 
-          except:
-            pass
-            
-          solver.net.save(netfilename+"."+str(numupdates)) 
-          try:
-            os.remove(embeddingfilename+"."+str(numupdates)) 
-          except:
-            pass
-
-          h5f=h5py.File(embeddingfilename+"."+str(numupdates)) 
-          h5f.create_dataset('embedding',data=embedding) 
-          h5f.close() 
-          now=time.time() 
-          print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
-          nextprint=2*nextprint 
-          numsinceupdates=0 
-          sumsinceloss=0 
-
-solver.net.save(netfilename)
+net.save(netfilename)
 try:
   os.remove(embeddingfilename)
 except:
@@ -259,22 +308,22 @@ h5f.close()
 now=time.time() 
 print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
 
-# GLOG_minloglevel=5 PYTHONPATH=../../python python ./pretrain.py
+# using precomputed id2cat
 # using precomputed label counts
 # delta t average   since example pass     learning
 #            loss    last counter  num         rate
-#  1.935s   2.336   2.336    5001    0    9.999e-04
-#  3.834s   2.348   2.360     10K    0    9.998e-04
-#  7.025s   2.320   2.292     20K    0    9.996e-04
-# 12.678s   2.304   2.289     40K    0    9.992e-04
-# 23.392s   2.283   2.261     80K    0    9.984e-04
-# 44.113s   2.274   2.265    160K    0    9.968e-04
-#  1.421m   2.268   2.263    320K    0    9.936e-04
-#  2.767m   2.270   2.272    640K    0    9.873e-04
-#  5.430m   2.271   2.272   1280K    0    9.747e-04
-# 10.685m   2.270   2.269   2560K    1    9.501e-04
-# 21.165m   2.255   2.241   5121K    2    9.027e-04
-# 42.023m   2.218   2.180     10M    4    8.148e-04
-#  1.395h   2.160   2.101     20M    9    6.639e-04
-#  2.784h   2.102   2.044     40M   19    4.408e-04
-#  3.471h   2.086   2.024     51M   23    3.602e-04
+# 20.620s   1.596   1.596    5001    0    9.990e-04
+# 23.365s   1.619   1.643     10K    0    9.980e-04
+# 28.489s   1.589   1.559     20K    0    9.960e-04
+# 38.018s   1.619   1.648     40K    0    9.920e-04
+# 58.517s   1.633   1.648     80K    0    9.841e-04
+#  1.597m   1.640   1.646    160K    0    9.685e-04
+#  2.767m   1.599   1.558    320K    0    9.380e-04
+#  5.072m   1.589   1.579    640K    0    8.798e-04
+#  9.646m   1.530   1.472   1280K    0    7.740e-04
+# 18.812m   1.505   1.480   2560K    0    5.991e-04
+# 37.171m   1.471   1.436   5121K    1    3.590e-04
+#  1.202h   1.400   1.329     10M    2    1.289e-04
+#  2.352h   1.333   1.266     20M    4    1.661e-05
+#  4.651h   1.292   1.251     40M    9    2.757e-07
+# ...

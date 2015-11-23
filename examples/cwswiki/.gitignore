@@ -1,6 +1,6 @@
-pretrain.prototxt
-pretrain.labelcounts.txt
+*.precomputed.txt
 *.bz2
 *histo
 *.embedding*
 *.model*
+pretrain.prototxt

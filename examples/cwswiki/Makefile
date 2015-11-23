@@ -2,6 +2,17 @@ SHELL=/bin/zsh
 
 tagcutoff=150
 tokencutoff=100
+windowsize=10
+embedd=300
+batchsize=5001
+numconvk=100
+alpha=0.0
+eta=1e-3
+etadecay=0.999
+weightdecay=1e-6
+labelnoise=1e-6
+numtags=100
+maxshufbuf=100000
 
 .SECONDARY: 
 
@@ -9,9 +20,9 @@ tokencutoff=100
 
 all: 
 
-pretrain.model: pretrain.py pretrain.bz2 tokencooc.bz2
+pretrain.model: pretrain.py tokenhisto taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2
 	@rm -f $(wildcard pretrain.model.* pretrain.embedding.h5f.*)
-	GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
+	@MAXSHUFBUF=$(maxshufbuf) NUMTAGS=$(numtags) ALPHA=$(alpha) ETA=$(eta) ETADECAY=$(etadecay) WEIGHTDECAY=$(weightdecay) LABELNOISE=$(labelnoise) WINDOWSIZE=$(windowsize) EMBEDD=$(embedd) BATCHSIZE=$(batchsize) NUMCONVK=$(numconvk) TAGCUTOFF=$(tagcutoff) TOKENCUTOFF=$(tokencutoff) GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
 
 #------------------------------------------------
 # preprocessing stuff
@@ -46,19 +57,3 @@ taghisto: enwiki-20150901.id2cat.txt.bz2
 
 tokenhisto: text/AA/wiki_00.bz2 maketokenhisto.pl
 	bzcat $(word 1,$^) | perl ./$(word 2,$^) > $@
-
-tokencooc.bz2: text/AA/wiki_00.bz2 maketokencooc.pl tokenhisto
-	bzcat $(word 1,$^) | perl ./$(word 2,$^) $(word 3,$^) $(tokencutoff) | bzip2 > $@
-
-pretrain.bz2: seed=69
-pretrain.bz2: makepretrain.pl taghisto enwiki-20150901.id2cat.txt.bz2 tokenhisto text/AA/wiki_00.bz2 
-	bzcat $(word 5,$^) | perl ./$(word 1,$^) $(word 2,$^) $(tagcutoff) <(bzcat $(word 3,$^)) $(word 4,$^) $(tokencutoff) | \
-	perl -pe 'BEGIN { srand $(seed); } $$_=rand()."\t$$_"' | \
-	sort -S50% -t$$'\t' -k1,1n | \
-	cut -d$$'\t' -f2- | bzip2 > $@
-
-#num tags = 13039 at ./makepretrain.pl line 39, <GEN0> line 19374.
-#num tokens = 260544 at ./makepretrain.pl line 66, <GEN2> line 260545.
-#nocat = 4779776 at ./makepretrain.pl line 95, <GEN3> line 65302109.
-#shortpara = 1049979 at ./makepretrain.pl line 96, <GEN3> line 65302109.
-#shortsentence = 102595 at ./makepretrain.pl line 97, <GEN3> line 65302109.

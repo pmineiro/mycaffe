@@ -6,7 +6,7 @@ import numpy as np
 class CaffeFinetuner:
   def __init__ (self, init_data):
     self.lrs = init_data['lrs']
-    self.solver = init_data['solver']
+    self.net = init_data['net']
     self.embedding = init_data['embedding']
     self.windowsize = init_data['windowsize']
     self.embedd = init_data['embedd']
@@ -21,7 +21,7 @@ class CaffeFinetuner:
 
     if self.alpha > 0:
       self.momembeddiff = np.zeros_like (embedding)
-      self.momsolver = init_data['momsolver']
+      self.momnet = init_data['momnet']
 
     self.comboinputs = np.zeros ((self.batchsize,self.windowsize*self.embedd+self.numtags,1,1),dtype='f')
     self.bogus = np.zeros ((self.batchsize,1,1,1),dtype='f')
@@ -30,7 +30,7 @@ class CaffeFinetuner:
     self.predcomboinputs = np.zeros ((self.batchsize,self.windowsize*self.embedd+self.numtags,1,1),dtype='f')
 
   def prior (self):
-    return self.solver.net.params['lastip'][1].data.reshape(self.numtags)
+    return self.net.params['lastip'][1].data.reshape(self.numtags)
 
   # TODO: test this routine ...
 
@@ -39,12 +39,12 @@ class CaffeFinetuner:
       for pos, t in enumerate (part):
         self.predcomboinputs[n,pos*self.embedd:(pos+1)*self.embedd,0,0] = self.embedding[:,t]
 
-    self.solver.net.set_input_arrays (self.predcomboinputs, self.bogus)
-    res = self.solver.net.forward ()
+    self.net.set_input_arrays (self.predcomboinputs, self.bogus)
+    res = self.net.forward ()
 
     # TODO: I'm assuming len (parts) < self.batchsize ...
 
-    scores = [ np.copy (self.solver.net.blobs['lastip'].data[n,:].reshape (self.numtags)) for n in range (len (parts)) ]
+    scores = [ np.copy (self.net.blobs['lastip'].data[n,:].reshape (self.numtags)) for n in range (len (parts)) ]
 
     return scores
 
@@ -61,10 +61,10 @@ class CaffeFinetuner:
     self.bindex += 1
 
     if self.bindex >= self.batchsize:
-      self.solver.net.set_input_arrays (self.comboinputs, self.bogus)
-      res = self.solver.net.forward ()
-      self.solver.net.backward ()
-      data_diff = self.solver.net.blobs['data'].diff.reshape (self.batchsize,self.windowsize*self.embedd+self.numtags,1,1)
+      self.net.set_input_arrays (self.comboinputs, self.bogus)
+      res = self.net.forward ()
+      self.net.backward ()
+      data_diff = self.net.blobs['data'].diff.reshape (self.batchsize,self.windowsize*self.embedd+self.numtags,1,1)
 
       if self.alpha > 0:
         self.momembeddiff *= self.alpha
@@ -81,9 +81,9 @@ class CaffeFinetuner:
         self.embedding *= (1.0 - self.weightdecay * self.lrs['embedding'] * self.eta)
 
       if self.alpha > 0:
-        for (name,layer,momlayer) in zip (self.solver.net._layer_names,
-                                          self.solver.net.layers,
-                                          self.momsolver.net.layers):
+        for (name,layer,momlayer) in zip (self.net._layer_names,
+                                          self.net.layers,
+                                          self.momnet.layers):
            blobnum = 0 
            for (blob,momblob) in zip (layer.blobs,momlayer.blobs): 
              myeta = self.lrs[(name,blobnum)] * self.eta 
@@ -94,8 +94,8 @@ class CaffeFinetuner:
                blob.data[:] *= (1.0 - weightdecay * myeta)
              blobnum = blobnum + 1 
       else:
-        for (name,layer) in zip (self.solver.net._layer_names,
-                                 self.solver.net.layers):
+        for (name,layer) in zip (self.net._layer_names,
+                                 self.net.layers):
            blobnum = 0 
            for blob in layer.blobs:
              myeta = self.lrs[(name,blobnum)] * self.eta 
