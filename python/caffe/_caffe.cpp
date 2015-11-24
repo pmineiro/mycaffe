@@ -127,8 +127,8 @@ void Net_SetInputArrays(Net<Dtype>* net, bp::object data_obj,
         " multiple of batch size");
   }
 
-  md_layer->Reset(static_cast<Dtype*>(PyArray_DATA(data_arr)),
-      static_cast<Dtype*>(PyArray_DATA(labels_arr)),
+  md_layer->Reset(reinterpret_cast<Dtype*>(PyArray_DATA(data_arr)),
+      reinterpret_cast<Dtype*>(PyArray_DATA(labels_arr)),
       PyArray_DIMS(data_arr)[0]);
 }
 
