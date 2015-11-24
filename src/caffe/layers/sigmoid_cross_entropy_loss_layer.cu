@@ -8,13 +8,10 @@ namespace caffe {
 template <typename Dtype>
 __global__ void SigmoidCrossEntropyLossForward(const int n, const Dtype* in, const Dtype* target, Dtype* loss) {
   CUDA_KERNEL_LOOP(index, n) {
-    // In[1] := Limit[(-p (1 - t) - Log[1 + Exp[-p]]) - (t p), p -> -Infinity] 
-    // Out[1] = 0
-
-    if (in[index] < -15) {
-      loss[index] = in[index] * target[index];
+    if (in[index] < -15.) {
+      loss[index] = -in[index] * target[index];
     } else {
-      loss[index] = -(-in[index] * (1. - target[index]) - log(1. + exp(-in[index])));
+      loss[index] = in[index] * (1. - target[index]) + log(1. + exp(-in[index]));
     }
   }
 }

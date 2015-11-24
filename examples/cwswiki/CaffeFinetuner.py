@@ -20,7 +20,7 @@ class CaffeFinetuner:
     self.bindex=0
 
     if self.alpha > 0:
-      self.momembeddiff = np.zeros_like (embedding)
+      self.momembeddiff = np.zeros_like (self.embedding)
       self.momnet = init_data['momnet']
 
     self.comboinputs = np.zeros ((self.batchsize,self.windowsize*self.embedd+self.numtags,1,1),dtype='f')
@@ -32,7 +32,7 @@ class CaffeFinetuner:
   def prior (self):
     return self.net.params['lastip'][1].data.reshape(self.numtags)
 
-  def predict (self, parts, labels):
+  def predict (self, parts):
     for n, part in enumerate (parts):
       for pos, t in enumerate (part):
         self.predcomboinputs[n,pos*self.embedd:(pos+1)*self.embedd,0,0] = self.embedding[:,t]
@@ -90,7 +90,7 @@ class CaffeFinetuner:
                momblob.data[:] += myeta * blob.diff
                blob.data[:] -= momblob.data
                if self.weightdecay > 0:
-                 blob.data[:] *= (1.0 - weightdecay * myeta)
+                 blob.data[:] *= (1.0 - self.weightdecay * myeta)
                blobnum = blobnum + 1 
         else:
           for (name,layer) in zip (self.net._layer_names,
