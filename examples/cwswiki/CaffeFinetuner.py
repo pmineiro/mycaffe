@@ -53,14 +53,15 @@ class CaffeFinetuner:
 
     self.comboinputs[self.bindex,(self.windowsize*self.embedd):,0,0] = self.labelnoise
     for l in labels:
-      if l <= self.numtags:
-        self.comboinputs[self.bindex,(self.windowsize*self.embedd)+l-1,0,0] = 1.0-self.labelnoise
+      if l < self.numtags:
+        self.comboinputs[self.bindex,(self.windowsize*self.embedd)+l,0,0] = 1.0-self.labelnoise
 
     self.bindex += 1
 
     if self.bindex >= self.batchsize:
       self.net.set_input_arrays (self.comboinputs, self.bogus)
       res = self.net.forward ()
+
       if self.eta > 0:
         self.net.backward ()
         data_diff = self.net.blobs['data'].diff.reshape (self.batchsize,self.windowsize*self.embedd+self.numtags,1,1)
