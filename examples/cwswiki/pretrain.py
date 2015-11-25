@@ -27,6 +27,7 @@ batchsize=int(os.environ['batchsize'])
 numconvk=int(os.environ['numconvk'])
 alpha=float(os.environ['alpha'])
 eta=float(os.environ['eta'])
+etamin=min(eta,float(os.environ['etamin']))
 etadecay=float(os.environ['etadecay'])
 weightdecay=float(os.environ['weightdecay'])
 labelnoise=float(os.environ['labelnoise'])
@@ -96,13 +97,13 @@ except exceptions.IOError:
   print " %g seconds.  len(id2cat)  = %d"%(float(time.time()-id2catstart), len(id2cat))
 
 lrs=dict()
-lrs['embedding']=10
-lrs[('conv1',0)]=5
-lrs[('conv1',1)]=10
-lrs[('conv2',0)]=4
-lrs[('conv2',1)]=8
-lrs[('conv3',0)]=3
-lrs[('conv3',1)]=6
+lrs['embedding']=4
+lrs[('conv1',0)]=4
+lrs[('conv1',1)]=8
+lrs[('conv2',0)]=3
+lrs[('conv2',1)]=6
+lrs[('conv3',0)]=2
+lrs[('conv3',1)]=4
 lrs[('ip1',0)]=1
 lrs[('ip1',1)]=2
 lrs[('ip2',0)]=1
@@ -195,7 +196,7 @@ except exceptions.IOError:
 for layer in net.layers:
   blobnum=0 
   for blob in layer.blobs:
-    if blobnum == 0:
+    if blobnum == 0 and eta > 0:
       blob.data[:]=(1.0/math.sqrt(np.prod(blob.data.shape[1:])))*np.random.standard_normal(size=blob.data.shape)
     else:
       blob.data[:]=0
@@ -232,8 +233,8 @@ finetuner = CaffeFinetuner.CaffeFinetuner(params)
 # iterate
 #-------------------------------------------------
 
-print "%7s\t%7s\t%7s\t%7s\t%4s\t%9s"%("delta t","average","since","example","pass","learning") 
-print "%7s\t%7s\t%7s\t%7s\t%4s\t%9s"%("","loss","last","counter","num","rate") 
+print "%7s\t%7s\t%7s\t%7s\t%4s\t%9s"%("delta","average","since","example","pass","learning") 
+print "%7s\t%7s\t%7s\t%7s\t%4s\t%9s"%("t","loss","last","counter","num","rate") 
 
 start=time.time()
 numsinceupdates=0 
@@ -271,7 +272,7 @@ for passes in range(24):
     
             numupdates+=1
             numsinceupdates+=1
-            finetuner.eta*=etadecay
+            finetuner.eta=etadecay*finetuner.eta+(1.0-etadecay)*etamin
     
             if numupdates >= nextprint:
               try:
@@ -305,23 +306,62 @@ h5f.close()
 now=time.time() 
 print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
 
+# eta = 0
 # using precomputed id2cat
 # using precomputed label counts
-# delta t average   since example pass     learning
-#            loss    last counter  num         rate
-# 20.551s   1.596   1.596    5001    0    9.990e-04
-# 23.321s   1.619   1.643     10K    0    9.980e-04
-# 28.246s   1.589   1.559     20K    0    9.960e-04
-# 37.464s   1.619   1.648     40K    0    9.920e-04
-# 56.239s   1.633   1.648     80K    0    9.841e-04
-#  1.559m   1.640   1.646    160K    0    9.685e-04
-#  2.696m   1.599   1.558    320K    0    9.380e-04
-#  4.990m   1.589   1.579    640K    0    8.798e-04
-#  9.553m   1.530   1.472   1280K    0    7.740e-04
-# 18.567m   1.505   1.480   2560K    0    5.991e-04
-# 35.898m   1.471   1.436   5121K    1    3.590e-04
-#  1.177h   1.400   1.329     10M    2    1.289e-04
-#  2.331h   1.333   1.265     20M    4    1.661e-05
-#  4.636h   1.292   1.251     40M    9    2.757e-07
-#  9.237h   1.271   1.250     81M   18    7.603e-11
-# 11.761h   1.266   1.249    104M   23    8.452e-13
+#   delta average   since example pass     learning
+#       t    loss    last counter  num         rate
+# 18.176s   1.703   1.703    5001    0    0.000e+00
+# 20.068s   1.718   1.733     10K    0    0.000e+00
+# 23.399s   1.697   1.676     20K    0    0.000e+00
+# 29.803s   1.726   1.756     40K    0    0.000e+00
+# 41.569s   1.744   1.762     80K    0    0.000e+00
+#  1.068m   1.755   1.767    160K    0    0.000e+00
+#  1.794m   1.741   1.726    320K    0    0.000e+00
+#  3.291m   1.756   1.771    640K    0    0.000e+00
+#  6.270m   1.732   1.709   1280K    0    0.000e+00
+# 11.811m   1.755   1.777   2560K    0    0.000e+00
+# 22.759m   1.767   1.779   5121K    1    0.000e+00
+# 44.247m   1.766   1.766     10M    2    0.000e+00
+#  1.448h   1.769   1.771     20M    4    0.000e+00
+#  2.862h   1.769   1.769     40M    9    0.000e+00
+# ...
+
+# eta = 0, initialized weights
+# using precomputed id2cat
+# using precomputed label counts
+#   delta average   since example pass     learning
+#       t    loss    last counter  num         rate
+# 19.302s   1.703   1.703    5001    0    0.000e+00
+# 21.283s   1.718   1.733     10K    0    0.000e+00
+# 24.567s   1.697   1.676     20K    0    0.000e+00
+# 30.752s   1.726   1.756     40K    0    0.000e+00
+# 42.395s   1.744   1.762     80K    0    0.000e+00
+#  1.062m   1.756   1.767    160K    0    0.000e+00
+#  1.768m   1.741   1.726    320K    0    0.000e+00
+#  3.207m   1.756   1.772    640K    0    0.000e+00
+#  6.064m   1.732   1.709   1280K    0    0.000e+00
+# 11.393m   1.755   1.777   2560K    0    0.000e+00
+# 22.187m   1.767   1.779   5121K    1    0.000e+00
+# 43.429m   1.766   1.766     10M    2    0.000e+00
+#  1.431h   1.769   1.771     20M    4    0.000e+00
+# ...
+
+# eta > 0
+# using precomputed id2cat
+# using precomputed label counts
+#   delta average   since example pass     learning
+#       t    loss    last counter  num         rate
+# 20.653s   1.703   1.703    5001    0    9.975e-02
+# 23.586s   1.718   1.733     10K    0    9.950e-02
+# 28.822s   1.697   1.676     20K    0    9.900e-02
+# 38.608s   1.726   1.756     40K    0    9.802e-02
+# 57.327s   1.744   1.762     80K    0    9.607e-02
+#  1.586m   1.755   1.766    160K    0    9.230e-02
+#  2.747m   1.739   1.724    320K    0    8.520e-02
+#  5.101m   1.752   1.766    640K    0    7.259e-02
+#  9.827m   1.702   1.651   1280K    0    5.269e-02
+# 19.180m   1.686   1.670   2560K    0    2.777e-02
+# 36.967m   1.667   1.648   5121K    1    7.715e-03
+#  1.199h   1.647   1.627     10M    2    6.037e-04
+# ...

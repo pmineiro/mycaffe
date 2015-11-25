@@ -34,6 +34,11 @@ batchsize=int(os.environ['batchsize'])
 numtags=int(os.environ['numtags'])
 #maxshufbuf=int(os.environ['maxshufbuf'])
 
+def random_sublist(lst, length):
+  start=random.randrange(1+len(lst)-length)
+  return lst[start:start+length]
+
+
 #-------------------------------------------------
 # which ids to use for prevalidating
 #-------------------------------------------------
@@ -117,29 +122,30 @@ for passes in range(1):
   batchnum=0
   for docid, paragraphs in DocGenerator.docs('text/AA/wiki_00.shuf.bz2'):
     if docid in id2cat and prevalidatefilter(str(docid)):
-      for s in DocGenerator.sentences(paragraphs):
-        if len(s) < windowsize:
-          continue
 
-        labels=id2cat[docid]
-        tokstart=random.randrange(1+len(s)-windowsize)
-        tokens=[ tokennum[t] if t in tokennum else 0 
-                  for t in s[tokstart:tokstart+windowsize] ]
+      scores=finetuner.predict (
+        [ [ tokennum[t] if t in tokennum else 0 
+            for t in random_sublist(s, windowsize) ]
+          for s in DocGenerator.sentences(paragraphs) if len(s) >= windowsize ]
+      )
+      labels=id2cat[docid]
 
-        rv=finetuner.update(tokens, labels)
+      loss=0
+      for s in scores:
+        thisloss=np.sum(np.log(1.0+np.exp(-s)))+np.sum(s)-np.sum(s[ [ l for l in labels if l < numtags ] ])
+        loss+=thisloss
+
+      sumloss+=loss/batchsize
+      sumsinceloss+=loss/batchsize
     
-        if rv[0]:
-          sumloss+=rv[1]
-          sumsinceloss+=rv[1]
-    
-          numupdates+=1
-          numsinceupdates+=1
-          if numupdates >= nextprint:
-            now=time.time() 
-            print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
-            nextprint=2*nextprint 
-            numsinceupdates=0 
-            sumsinceloss=0 
+      numupdates+=float(len(scores))/batchsize
+      numsinceupdates+=float(len(scores))/batchsize
+      if numupdates >= nextprint:
+        now=time.time() 
+        print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
+        nextprint=2*nextprint 
+        numsinceupdates=0 
+        sumsinceloss=0 
 
 now=time.time() 
 print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
