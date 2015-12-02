@@ -15,6 +15,14 @@ export labelnoise=1e-6
 export numtags=100
 export maxshufbuf=100000
 
+export searnalpha=0.0
+export searneta=1e-4
+export searnetamin=1e-4
+export searnetadecay=1
+export searnvweta=1e-1
+export searnmaxshufbuf=1000
+export finetunedelay=10000
+
 .SECONDARY: 
 
 .PHONY: 
@@ -27,6 +35,10 @@ pretrain.model: pretrain.py tokenhisto taghisto enwiki-20150901.id2cat.txt.bz2 t
 
 prevalidate: prevalidate.py tokenhisto taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2 pretrain.model
 	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
+
+searn: search_cws.py pretrain.model tokenhisto taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2
+	GLOG_minloglevel=5 PYTHONPATH=../../python:../../../vowpal_wabbit/python python ./$<
+
 
 #------------------------------------------------
 # preprocessing stuff

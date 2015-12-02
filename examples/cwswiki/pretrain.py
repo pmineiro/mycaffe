@@ -16,6 +16,9 @@ import CaffeFinetuner
 import DocGenerator
 from Pretty import nicetime, nicecount
 
+random.seed(69)
+np.random.seed(8675309)
+
 sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0) 
 sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0) 
 
@@ -110,9 +113,6 @@ lrs[('ip2',0)]=1
 lrs[('ip2',1)]=2
 lrs[('lastip',0)]=1
 lrs[('lastip',1)]=0
-
-random.seed(69)
-np.random.seed(8675309)
 
 #-------------------------------------------------
 # define model
@@ -364,4 +364,5 @@ print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/n
 # 19.180m   1.686   1.670   2560K    0    2.777e-02
 # 36.967m   1.667   1.648   5121K    1    7.715e-03
 #  1.199h   1.647   1.627     10M    2    6.037e-04
+#  2.371h   1.638   1.629     20M    4    1.353e-05
 # ...
