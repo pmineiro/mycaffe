@@ -9,10 +9,16 @@ dataset = train-labels-idx1-ubyte.gz train-images-idx3-ubyte.gz t10k-labels-idx1
 all: 
 
 test: test.py train.model 
-	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
+	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$< $(word 2, $^)
 
 train.model: train.py $(dataset)
 	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
+
+trainlowrank.model: trainlowrank.py $(dataset)
+	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
+
+testlowrank: test.py trainlowrank.model 
+	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$< $(word 2, $^)
 
 %.check:
 	@test -x "$$(which $*)" || {				\
