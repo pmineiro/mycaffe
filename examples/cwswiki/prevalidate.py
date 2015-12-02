@@ -25,19 +25,11 @@ tokencutoff=int(os.environ['tokencutoff'])
 windowsize=int(os.environ['windowsize'])
 embedd=int(os.environ['embedd'])
 batchsize=int(os.environ['batchsize'])
-#numconvk=int(os.environ['numconvk'])
-#alpha=float(os.environ['alpha'])
-#eta=float(os.environ['eta'])
-#etadecay=float(os.environ['etadecay'])
-#weightdecay=float(os.environ['weightdecay'])
-#labelnoise=float(os.environ['labelnoise'])
 numtags=int(os.environ['numtags'])
-#maxshufbuf=int(os.environ['maxshufbuf'])
 
 def random_sublist(lst, length):
   start=random.randrange(1+len(lst)-length)
   return lst[start:start+length]
-
 
 #-------------------------------------------------
 # which ids to use for prevalidating
@@ -132,7 +124,7 @@ for passes in range(1):
 
       loss=0
       for s in scores:
-        thisloss=np.sum(np.log(1.0+np.exp(-s)))+np.sum(s)-np.sum(s[ [ l for l in labels if l < numtags ] ])
+        thisloss=np.sum(np.log(1.0+np.exp(s)))-np.sum(s[ [ l for l in labels if l < numtags ] ])
         loss+=thisloss
 
       sumloss+=loss/batchsize
