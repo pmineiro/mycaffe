@@ -39,7 +39,7 @@ with gzip.GzipFile('t10k-labels-idx1-ubyte.gz') as f:
   trainlabels[:,0,0,0] = np.array(struct.unpack("%uB"%nlabels, f.read(nlabels)),dtype='f')
 
 protofilename=os.path.join(os.path.dirname(os.path.realpath(__file__)),'train.prototxt')
-modelfilename=os.path.join(os.path.dirname(os.path.realpath(__file__)),'train.model')
+modelfilename=os.path.join(os.path.dirname(os.path.realpath(__file__)),sys.argv[1])
 
 caffe.set_mode_cpu()
 net = caffe.Net(protofilename, modelfilename, caffe.TEST)
