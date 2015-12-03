@@ -9,10 +9,7 @@ import time
 from Pretty import nicetime, nicecount
 
 batchsize=64
-eta=1e-6
-etamin=1e-7
-etadecay=0.9999
-alpha=0.9
+eta=0
 weightdecay=0
 
 sys.stdout=os.fdopen(sys.stdout.fileno(), 'w', 0) 
