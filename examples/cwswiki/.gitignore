@@ -3,4 +3,4 @@
 *histo
 *.embedding*
 *.model*
-pretrain.prototxt
+*.prototxt
