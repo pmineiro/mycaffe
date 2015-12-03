@@ -13,6 +13,7 @@ import time
 import CaffeFinetuner 
 import DocGenerator
 import SentenceSelector
+import TheNet
 
 from Pretty import nicetime, nicecount
 
@@ -26,17 +27,20 @@ tagcutoff=int(os.environ['tagcutoff'])
 tokencutoff=int(os.environ['tokencutoff'])
 windowsize=int(os.environ['windowsize'])
 embedd=int(os.environ['embedd'])
-batchsize=int(os.environ['batchsize'])
+batchsize=int(os.environ['searnbatchsize'])
+numconvk=int(os.environ['numconvk'])
 searnalpha=float(os.environ['searnalpha'])
 searneta=float(os.environ['searneta'])
 searnetamin=min(searneta,float(os.environ['searnetamin']))
 searnetadecay=float(os.environ['searnetadecay'])
+searnreplaybuf=int(os.environ['searnreplaybuf'])
 searnvweta=float(os.environ['searnvweta'])
 weightdecay=float(os.environ['weightdecay'])
 labelnoise=float(os.environ['labelnoise'])
 numtags=int(os.environ['numtags'])
 searnmaxshufbuf=int(os.environ['searnmaxshufbuf'])
 finetunedelay=int(os.environ['finetunedelay'])
+prefixsentences=int(os.environ['prefixsentences'])
 
 class Example:
   def __init__ (self, partslabels, numtags):
@@ -112,9 +116,13 @@ lrs[('ip2',1)]=2
 lrs[('lastip',0)]=1
 lrs[('lastip',1)]=0
 
-protofilename=os.path.join(os.path.dirname(os.path.realpath(__file__)),'pretrain.prototxt')
+protofilename=os.path.join(os.path.dirname(os.path.realpath(__file__)),'searn.prototxt')
 netfilename=os.path.join(os.path.dirname(os.path.realpath(__file__)),'pretrain.model')
 embeddingfilename=os.path.join(os.path.dirname(os.path.realpath(__file__)),'pretrain.embedding.h5f')
+
+with open(protofilename,'w') as f:
+  f.write("force_backward: true\n")
+  f.write(str(TheNet.net(batchsize,embedd,windowsize,numtags,numconvk)))
 
 caffe.set_mode_gpu()
 net = caffe.Net(protofilename, netfilename, caffe.TRAIN)
@@ -134,26 +142,27 @@ if searnalpha > 0:
 
 finetuner = CaffeFinetuner.CaffeFinetuner(params)
 
-vw = pyvw.vw('--invariant --quiet --noconstant --search 2 --search_task hook -b 20 -q pq --cubic npq -l %g'%(searnvweta))
-
 task_data = { 'test': False, 'finetuner': finetuner, 
               'finetunedelay': finetunedelay }
+vw = pyvw.vw('--invariant --quiet --search 2 --search_task hook --replay_c %u -b 20 -q pq --cubic npq -l %g'%(searnreplaybuf,searnvweta))
 task = vw.init_search_task(SentenceSelector.SentenceSelector, task_data)
 
 #-------------------------------------------------
 # iterate
 #-------------------------------------------------
 
-print "%7s %9s %9s %9s %9s %7s %4s %9s"%("delta","excess","since","optimal","since","example","pass","learning") 
-print "%7s %9s %9s %9s %9s %7s %4s %9s"%("t","loss","last","loss","last","counter","num","rate") 
+print "%7s %7s %9s %9s %9s %9s %7s %4s %9s"%("delta","length","excess","since","oracle","since","example","pass","learning") 
+print "%7s %7s %9s %9s %9s %9s %7s %4s %9s"%("t","since","loss","last","loss","last","counter","num","rate") 
 
 start=time.time()
 numsinceupdates=0 
-numupdates=0 
+numupdates=0
+numsincelenupdates=0 
 sumloss=0 
 sumsinceloss=0 
 sumoptimalloss=0 
 sumsinceoptimalloss=0 
+sumsincelenupdates=0
 nextprint=1 
 shufbuf=[]
 
@@ -173,7 +182,7 @@ for passes in range(24):
       labels = id2cat[docid]
 
       if len(shufbuf) < searnmaxshufbuf:
-        shufbuf.append((parts,labels))
+        shufbuf.append((parts[:prefixsentences],labels))
       else:
         index=random.randrange(searnmaxshufbuf)
         dq=shufbuf[index]
@@ -187,32 +196,54 @@ for passes in range(24):
         sumsinceloss+=loss/batchsize
         sumoptimalloss+=optimalloss/batchsize
         sumsinceoptimalloss+=optimalloss/batchsize
+        sumsincelenupdates+=float(len(dq[0]))
     
         numupdates+=float(len(dq[0]))/batchsize
         numsinceupdates+=float(len(dq[0]))/batchsize
+        numsincelenupdates+=1
+
         if numupdates >= nextprint:
           now=time.time() 
-          print "%7s %9.5f %9.5f %9.5f %9.5f %7s %4u %9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,sumoptimalloss/numupdates,sumsinceoptimalloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
+          print "%7s %7.3f %9.5f %9.5f %9.5f %9.5f %7s %4u %9.3e"%(nicetime(float(now-start)),sumsincelenupdates/numsincelenupdates,sumloss/numupdates,sumsinceloss/numsinceupdates,sumoptimalloss/numupdates,sumsinceoptimalloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
           nextprint=2*nextprint 
           numsinceupdates=0 
           sumsinceloss=0 
           sumsinceoptimalloss=0 
+          sumsincelenupdates=0
 
 now=time.time() 
-print "%7s %9.5f %9.5f %9.5f %9.5f %7s %4u %9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,sumoptimalloss/numupdates,sumsinceoptimalloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
+print "%7s %7.3f %9.5f %9.5f %9.5f %9.5f %7s %4u %9.3e"%(nicetime(float(now-start)),sumsincelenupdates/numsincelenupdates,sumloss/numupdates,sumsinceloss/numsinceupdates,sumoptimalloss/numupdates,sumsinceoptimalloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
 
-# GLOG_minloglevel=5 PYTHONPATH=../../python:../../../vowpal_wabbit/python python ./search_cws.py
-# using precomputed id2cat
-#   delta    excess     since   optimal     since example pass  learning
-#       t      loss      last      loss      last counter  num      rate
-#  2.029m   0.01867   0.01867   0.06286   0.06286    5091    0 1.000e-04
-#  6.994m   0.01530   0.01181   0.05173   0.04018     10K    0 1.000e-04
-# 12.543m   0.01632   0.01734   0.05954   0.06731     20K    0 1.000e-04
-# 26.594m   0.01686   0.01741   0.06744   0.07539     40K    0 1.000e-04
-# 52.312m   0.01775   0.01863   0.06808   0.06871     80K    0 1.000e-04
-#  1.625h   0.01833   0.01890   0.07039   0.07271    160K    0 1.000e-04
+# (using only first 20 sentences)
+#   delta  length    excess     since   optimal     since example pass  learning
+#       t   since      loss      last      loss      last counter  num      rate
+#  9.263s  10.891   0.03892   0.03892   0.08630   0.08630    1002    0 1.000e-04
+# 17.883s   5.478   0.03777   0.03662   0.10967   0.13290    2010    0 1.000e-04
+# 49.541s   5.689   0.03112   0.02444   0.10695   0.10422    4007    0 1.000e-04
+#  1.927m   6.127   0.02650   0.02188   0.09196   0.07699    8020    0 1.000e-04
+#  5.615m   6.605   0.02295   0.01942   0.09114   0.09032     16K    0 1.000e-04
+# 14.471m   7.420   0.02031   0.01765   0.08559   0.08001     32K    0 1.000e-04
+# 33.275m   7.908   0.01893   0.01755   0.07882   0.07204     64K    0 1.000e-04
+#  1.190h   8.461   0.01884   0.01875   0.07621   0.07361    128K    0 1.000e-04
 # *** starting fine-tuning ***
-#  3.067h   0.01826   0.01819   0.07224   0.07408    320K    0 1.000e-04
-#  5.926h   0.01825   0.01824   0.07359   0.07494    640K    0 1.000e-04
-# 11.999h   0.01834   0.01843   0.07262   0.07165   1280K    0 1.000e-04
-# 
+#  2.322h   8.618   0.01841   0.01797   0.07471   0.07321    256K    0 1.000e-04
+#  4.522h   8.729   0.01854   0.01867   0.07484   0.07498    512K    0 1.000e-04
+# ...
+
+# (using everything)
+#   delta  length    excess     since   optimal     since example pass  learning
+#       t   since      loss      last      loss      last counter  num      rate
+# 24.716s  17.373   0.02198   0.02198   0.02775   0.02775    1025    0 1.000e-04
+# 40.258s   7.792   0.02243   0.02288   0.06445   0.10158    2038    0 1.000e-04
+#  1.621m   8.771   0.02380   0.02518   0.06595   0.06747    4064    0 1.000e-04
+#  3.291m   8.872   0.01969   0.01547   0.06158   0.05708    8012    0 1.000e-04
+# 10.848m   9.940   0.01780   0.01593   0.05782   0.05409     16K    0 1.000e-04
+# 20.405m   9.207   0.01755   0.01729   0.06753   0.07731     32K    0 1.000e-04
+# 41.346m   9.069   0.01687   0.01619   0.06849   0.06945     64K    0 1.000e-04
+#  1.342h   8.994   0.01775   0.01864   0.07169   0.07489    128K    0 1.000e-04
+# *** starting fine-tuning ***
+#  2.511h   8.934   0.01770   0.01765   0.07184   0.07199    256K    0 1.000e-04
+#  4.772h   8.890   0.01820   0.01869   0.07354   0.07523    512K    0 1.000e-04
+# Traceback (most recent call last):
+#   File "/home/pmineiro/src/vowpal_wabbit/python/pyvw.py", line 27, in <lambda>
+

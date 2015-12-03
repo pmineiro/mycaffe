@@ -21,6 +21,12 @@ def crossent (sp, sq):
            np.sum (  np.divide (np.multiply (sp, expsq), 1.0 + expsq) 
                    - np.log1p (np.exp (sp))))
 
+def sos2 (v,dv):
+  lower=math.floor(v/dv)
+  pos=(v/dv)-lower
+
+  return [ ("bin_%d"%lower,1.0-pos), ("bin_%d"%(lower+1),pos) ]
+
 class SentenceSelector (pyvw.SearchTask):
   def __init__ (self, vw, sch, num_actions, task_data):
     pyvw.SearchTask.__init__ (self, vw, sch, num_actions)
@@ -72,7 +78,7 @@ class SentenceSelector (pyvw.SearchTask):
 
     for score in enumerate (example.scores):
       with self.vw.example (
-        {'n' : [ "n_%d"%score[0] ],
+        {'n' : sos2(math.log(1+score[0]),1), 
          'p' : [ ('ce',crossent (score[1],prior)) ],
          'q' : [ ('ce',crossent (score[1],self.curscore)) ] }) as ex:
         if crossentlabels (self.curscore, example.labels) > \
