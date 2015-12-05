@@ -144,25 +144,29 @@ finetuner = CaffeFinetuner.CaffeFinetuner(params)
 
 task_data = { 'test': False, 'finetuner': finetuner, 
               'finetunedelay': finetunedelay }
-vw = pyvw.vw('--invariant --quiet --search 2 --search_task hook --replay_c %u -b 20 -q pq --cubic npq -l %g'%(searnreplaybuf,searnvweta))
+vw = pyvw.vw('--invariant --power_t 0.0 --search 2 --search_task hook --search_rollout none --replay_c %u -b 20 -q np -q nq -l %g'%(searnreplaybuf,searnvweta))
 task = vw.init_search_task(SentenceSelector.SentenceSelector, task_data)
 
 #-------------------------------------------------
 # iterate
 #-------------------------------------------------
 
-print "%7s %7s %9s %9s %9s %9s %7s %4s %9s"%("delta","length","excess","since","oracle","since","example","pass","learning") 
-print "%7s %7s %9s %9s %9s %9s %7s %4s %9s"%("t","since","loss","last","loss","last","counter","num","rate") 
+print "%7s %7s %7s %7s %7s %7s %7s %7s %7s %4s"%("delta","pos","excess","since","simple","since","oracle","since","example","pass") 
+print "%7s %7s %7s %7s %7s %7s %7s %7s %7s %4s"%("t","since","loss","last","excess","last","loss","last","counter","num") 
 
 start=time.time()
 numsinceupdates=0 
 numupdates=0
 numsincelenupdates=0 
+numsinceposupdates=0 
 sumloss=0 
 sumsinceloss=0 
 sumoptimalloss=0 
+sumsimpleloss=0 
 sumsinceoptimalloss=0 
+sumsincesimpleloss=0 
 sumsincelenupdates=0
+sumsinceposupdates=0
 nextprint=1 
 shufbuf=[]
 
@@ -186,64 +190,72 @@ for passes in range(24):
       else:
         index=random.randrange(searnmaxshufbuf)
         dq=shufbuf[index]
-        shufbuf[index]=(parts,labels)
+        shufbuf[index]=(parts[:prefixsentences],labels)
         task.learn(Example(dq,numtags))
 
         loss=(task.saveloss-task.saveoptimalloss)
         optimalloss=task.saveoptimalloss
+        simpleloss=(task.savesimpleloss-task.saveoptimalloss)
 
         sumloss+=loss/batchsize
         sumsinceloss+=loss/batchsize
         sumoptimalloss+=optimalloss/batchsize
+        sumsimpleloss+=simpleloss/batchsize
         sumsinceoptimalloss+=optimalloss/batchsize
+        sumsincesimpleloss+=simpleloss/batchsize
         sumsincelenupdates+=float(len(dq[0]))
+        sumsinceposupdates+=float(task.saveoptimalpos)
     
         numupdates+=float(len(dq[0]))/batchsize
         numsinceupdates+=float(len(dq[0]))/batchsize
         numsincelenupdates+=1
+        numsinceposupdates+=1
 
         if numupdates >= nextprint:
           now=time.time() 
-          print "%7s %7.3f %9.5f %9.5f %9.5f %9.5f %7s %4u %9.3e"%(nicetime(float(now-start)),sumsincelenupdates/numsincelenupdates,sumloss/numupdates,sumsinceloss/numsinceupdates,sumoptimalloss/numupdates,sumsinceoptimalloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
+          print "%7s %7.3f %7.5f %7.5f %7.5f %7.5f %7.5f %7.5f %7s %4u"%(nicetime(float(now-start)),sumsinceposupdates/numsinceposupdates,sumloss/numupdates,sumsinceloss/numsinceupdates,sumsimpleloss/numupdates,sumsincesimpleloss/numsinceupdates,sumoptimalloss/numupdates,sumsinceoptimalloss/numsinceupdates,nicecount(numupdates*batchsize),passes) 
           nextprint=2*nextprint 
           numsinceupdates=0 
           sumsinceloss=0 
           sumsinceoptimalloss=0 
+          sumsincesimpleloss=0 
           sumsincelenupdates=0
+          sumsinceposupdates=0
 
 now=time.time() 
-print "%7s %7.3f %9.5f %9.5f %9.5f %9.5f %7s %4u %9.3e"%(nicetime(float(now-start)),sumsincelenupdates/numsincelenupdates,sumloss/numupdates,sumsinceloss/numsinceupdates,sumoptimalloss/numupdates,sumsinceoptimalloss/numsinceupdates,nicecount(numupdates*batchsize),passes,finetuner.eta) 
+print "%7s %7.3f %7.5f %7.5f %7.5f %7.5f %7.5f %7.5f %7s %4u"%(nicetime(float(now-start)),sumsinceposupdates/numsinceposupdates,sumloss/numupdates,sumsinceloss/numsinceupdates,sumsimpleloss/numupdates,sumsincesimpleloss/numsinceupdates,sumoptimalloss/numupdates,sumsinceoptimalloss/numsinceupdates,nicecount(numupdates*batchsize),passes) 
 
 # (using only first 20 sentences)
-#   delta  length    excess     since   optimal     since example pass  learning
-#       t   since      loss      last      loss      last counter  num      rate
-#  9.263s  10.891   0.03892   0.03892   0.08630   0.08630    1002    0 1.000e-04
-# 17.883s   5.478   0.03777   0.03662   0.10967   0.13290    2010    0 1.000e-04
-# 49.541s   5.689   0.03112   0.02444   0.10695   0.10422    4007    0 1.000e-04
-#  1.927m   6.127   0.02650   0.02188   0.09196   0.07699    8020    0 1.000e-04
-#  5.615m   6.605   0.02295   0.01942   0.09114   0.09032     16K    0 1.000e-04
-# 14.471m   7.420   0.02031   0.01765   0.08559   0.08001     32K    0 1.000e-04
-# 33.275m   7.908   0.01893   0.01755   0.07882   0.07204     64K    0 1.000e-04
-#  1.190h   8.461   0.01884   0.01875   0.07621   0.07361    128K    0 1.000e-04
+# (searneta=1e-8)
+# GLOG_minloglevel=5 PYTHONPATH=../../python:../../../vowpal_wabbit/python python ./search_cws.py
+# using precomputed id2cat
+# creating quadratic features for pairs: np nq 
+# experience replay level=c, buffer=1000, replay count=1
+# Num weight bits = 20
+# learning rate = 0.0001
+# initial_t = 1
+# power_t = 0
+# using no cache
+# Reading datafile = 
+# num sources = 0
+#   delta     pos  excess   since  simple   since  oracle   since example pass
+#       t   since    loss    last  excess    last    loss    last counter  num
+#  1.502s   5.048 0.03306 0.03306 0.02529 0.02529 0.04929 0.04929     501    0
+#  2.234s   1.967 0.05751 0.08195 0.02640 0.02751 0.08630 0.12331    1002    0
+#  3.709s   1.925 0.05806 0.05860 0.02437 0.02235 0.10958 0.13260    2015    0
+#  6.750s   1.977 0.05147 0.04486 0.02476 0.02516 0.11543 0.12131    4024    0
+# 12.777s   2.322 0.03797 0.02440 0.02458 0.02440 0.10916 0.10285    8023    0
+# 24.804s   2.033 0.03014 0.02232 0.02346 0.02235 0.11918 0.12918     16K    0
+# 49.064s   2.093 0.02695 0.02375 0.02402 0.02457 0.12029 0.12140     32K    0
+#  1.609m   2.160 0.02636 0.02576 0.02529 0.02657 0.12589 0.13149     64K    0
+#  3.184m   2.170 0.02667 0.02698 0.02609 0.02689 0.12406 0.12223    128K    0
+#  6.330m   2.121 0.02624 0.02580 0.02607 0.02604 0.12712 0.13018    256K    0
+# 12.598m   2.132 0.02626 0.02629 0.02615 0.02623 0.12651 0.12591    513K    0
+# 25.315m   2.149 0.02618 0.02610 0.02607 0.02600 0.12622 0.12592   1026K    0
 # *** starting fine-tuning ***
-#  2.322h   8.618   0.01841   0.01797   0.07471   0.07321    256K    0 1.000e-04
-#  4.522h   8.729   0.01854   0.01867   0.07484   0.07498    512K    0 1.000e-04
-# ...
-
-# (using everything)
-#   delta  length    excess     since   optimal     since example pass  learning
-#       t   since      loss      last      loss      last counter  num      rate
-# 24.716s  17.373   0.02198   0.02198   0.02775   0.02775    1025    0 1.000e-04
-# 40.258s   7.792   0.02243   0.02288   0.06445   0.10158    2038    0 1.000e-04
-#  1.621m   8.771   0.02380   0.02518   0.06595   0.06747    4064    0 1.000e-04
-#  3.291m   8.872   0.01969   0.01547   0.06158   0.05708    8012    0 1.000e-04
-# 10.848m   9.940   0.01780   0.01593   0.05782   0.05409     16K    0 1.000e-04
-# 20.405m   9.207   0.01755   0.01729   0.06753   0.07731     32K    0 1.000e-04
-# 41.346m   9.069   0.01687   0.01619   0.06849   0.06945     64K    0 1.000e-04
-#  1.342h   8.994   0.01775   0.01864   0.07169   0.07489    128K    0 1.000e-04
-# *** starting fine-tuning ***
-#  2.511h   8.934   0.01770   0.01765   0.07184   0.07199    256K    0 1.000e-04
-#  4.772h   8.890   0.01820   0.01869   0.07354   0.07523    512K    0 1.000e-04
-# Traceback (most recent call last):
-#   File "/home/pmineiro/src/vowpal_wabbit/python/pyvw.py", line 27, in <lambda>
-
+# 51.503m   2.142 0.02640 0.02662 0.02630 0.02652 0.12650 0.12679   2052K    0
+#  1.728h   2.150 0.02644 0.02647 0.02646 0.02663 0.12640 0.12630   4104K    0
+#  3.424h   2.149 0.02704 0.02765 0.02673 0.02701 0.12633 0.12626   8208K    0
+#  6.803h   2.163 0.03015 0.03325 0.02849 0.03025 0.12558 0.12483     16M    0
+# 13.628h   2.203 0.04392 0.05770 0.03889 0.04929 0.12445 0.12331     32M    0
+# 

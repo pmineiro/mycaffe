@@ -15,15 +15,15 @@ export labelnoise=1e-6
 export numtags=100
 export maxshufbuf=100000
 
-export searnbatchsize=1001
+export searnbatchsize=501
 export searnalpha=0.0
-export searneta=1e-4
-export searnetamin=1e-4
+export searneta=1e-8
+export searnetamin=1e-8
 export searnetadecay=1
-export searnvweta=1e-2
+export searnvweta=1e-4
 export searnreplaybuf=1000
 export searnmaxshufbuf=1000
-export finetunedelay=10000
+export finetunedelay=100000
 export prefixsentences=20
 
 .SECONDARY: 
