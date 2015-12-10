@@ -85,7 +85,7 @@ class SentenceSelector (pyvw.SearchTask):
       with self.vw.example ({
           'n' : sos2(math.log(1+pos),1,"bin"),
           'p' : [ ('ce',crossent (score,prior)) ],
-          'q' : [ ('ce',crossent (score,example.ensemble)) ],
+          #'q' : [ ('ce',crossent (score,example.ensemble)) ],
           #'qflass' : [ ('ce',crossent (example.eachevidence[pos],example.ensembleevidence)) ],
 #          'pflass' : sos2(crossent(score[1],prior),4,"ce"),
 #          'q' : [ ('ce',crossent (score[1],self.curscore)) ] 

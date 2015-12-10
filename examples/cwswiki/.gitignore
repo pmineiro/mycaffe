@@ -1,6 +1,7 @@
-*.precomputed.txt
+*.precomputed.*.txt
 *.bz2
 *histo
 *.embedding*
 *.model*
 *.prototxt
+*.vw
