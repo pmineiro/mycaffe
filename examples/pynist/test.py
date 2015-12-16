@@ -76,22 +76,10 @@ for pos in range(0, nimages, batchsize):
 
   if numupdates >= nextprint:
     now=time.time() 
-    print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,eta) 
+    print "%7s\t%7.4f\t%7.4f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,eta) 
     nextprint=2*nextprint 
     numsinceupdates=0 
     sumsinceloss=0 
 
 now=time.time() 
-print "%7s\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,eta) 
-
-# delta t average   since example pass     learning
-#            loss    last counter  num         rate
-#    12ms   0.953   0.953      64    0    1.000e-06
-#    24ms   0.961   0.969     128    0    1.000e-06
-#    47ms   0.957   0.953     256    0    1.000e-06
-#    93ms   0.967   0.977     512    0    1.000e-06
-#   186ms   0.972   0.977    1024    0    1.000e-06
-#   367ms   0.974   0.976    2048    0    1.000e-06
-#   709ms   0.968   0.963    4096    0    1.000e-06
-#  1.430s   0.976   0.984    8192    0    1.000e-06
-#  1.750s   0.978   0.988    9984    0    1.000e-06
+print "%7s\t%7.4f\t%7.4f\t%7s\t%4u\t%9.3e"%(nicetime(float(now-start)),sumloss/numupdates,sumsinceloss/numsinceupdates,nicecount(numupdates*batchsize),passes,eta) 
