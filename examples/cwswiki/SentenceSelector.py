@@ -21,11 +21,11 @@ def crossent (sp, sq):
            np.sum (  np.divide (np.multiply (sp, expsq), 1.0 + expsq) 
                    - np.log1p (np.exp (sp))))
 
-def sos2 (v,dv):
+def sos2 (v,dv,prefix):
   lower=math.floor(v/dv)
   pos=(v/dv)-lower
 
-  return [ ("bin_%d"%lower,1.0-pos), ("bin_%d"%(lower+1),pos) ]
+  return [ ("%s_%d"%(prefix,lower),1.0-pos), ("%s_%d"%(prefix,lower+1),pos) ]
 
 class SentenceSelector (pyvw.SearchTask):
   def __init__ (self, vw, sch, num_actions, task_data):
@@ -64,6 +64,10 @@ class SentenceSelector (pyvw.SearchTask):
 
   def _setup (self, example):
     example.scores = self.finetuner.predict (example.parts)
+    example.ensemble = np.sum(example.scores,axis=0)/len(example.scores)
+    example.eachevidence = [x - self.finetuner.prior ()
+                            for x in example.scores]
+    example.ensembleevidence = np.sum(example.eachevidence,axis=0)/len(example.scores)
 
   def _run (self, example):
     if self.sch.get_search_state() == pyvw.SearchState.INIT_TEST:
@@ -74,35 +78,44 @@ class SentenceSelector (pyvw.SearchTask):
     prior = self.finetuner.prior ()
     self.curscore = prior
     self.optimalscore = prior
+    self.saveoptimalpos = -1
     self.selected = []
 
-    for score in enumerate (example.scores):
-      with self.vw.example (
-        {'n' : sos2(math.log(1+score[0]),1), 
-         'p' : [ ('ce',crossent (score[1],prior)) ],
-         'q' : [ ('ce',crossent (score[1],self.curscore)) ] }) as ex:
-        if crossentlabels (self.curscore, example.labels) > \
-           crossentlabels (score[1], example.labels):
+    for pos, score in enumerate (example.scores):
+      with self.vw.example ({
+          'n' : sos2(math.log(1+pos),1,"bin"),
+          'p' : [ ('ce',crossent (score,prior)) ],
+          #'q' : [ ('ce',crossent (score,example.ensemble)) ],
+          #'qflass' : [ ('ce',crossent (example.eachevidence[pos],example.ensembleevidence)) ],
+#          'pflass' : sos2(crossent(score[1],prior),4,"ce"),
+#          'q' : [ ('ce',crossent (score[1],self.curscore)) ] 
+        }) as ex:
+
+        delta=crossentlabels (self.curscore, example.labels) - \
+              crossentlabels (score, example.labels)
+        if delta > 0:
           best = self.KEEP
         else:
           best = self.DISCARD
         
-        pred = self.sch.predict (examples=ex, my_tag=1+score[0], oracle=best,
+        pred = self.sch.predict (examples=ex, my_tag=1+pos, oracle=best,
                                  condition=[(1+n,'r') for n in self.selected])
 
         if pred == self.KEEP:
-          self.curscore = score[1]
-          self.selected = [ score[0] ]
+          self.curscore = score
+          self.selected = [ pos ]
 
         if crossentlabels (self.optimalscore, example.labels) > \
-           crossentlabels (score[1], example.labels):
-          self.optimalscore = score[1]
+           crossentlabels (score, example.labels):
+          self.optimalscore = score
+          self.saveoptimalpos = pos 
 
     myloss = crossentlabels (self.curscore, example.labels) 
 
     if init_run:
       self.saveloss = myloss
       self.saveoptimalloss = crossentlabels (self.optimalscore, example.labels)
+      self.savesimpleloss = crossentlabels (example.scores[0], example.labels)
           
     self.sch.loss (myloss)
     return self.selected

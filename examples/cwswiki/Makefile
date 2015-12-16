@@ -1,60 +1,26 @@
 SHELL=/bin/zsh
 
-export tagcutoff=150
-export tokencutoff=100
-export windowsize=10
-export embedd=300
-export batchsize=5001
-export numconvk=100
-export alpha=0.0
-export eta=1e-1
-export etamin=1e-5
-export etadecay=0.9975
-export weightdecay=1e-6
-export labelnoise=1e-6
-export numtags=100
-export maxshufbuf=100000
-
-export searnbatchsize=1001
-export searnalpha=0.0
-export searneta=1e-4
-export searnetamin=1e-4
-export searnetadecay=1
-export searnvweta=1e-2
-export searnreplaybuf=1000
-export searnmaxshufbuf=1000
-export finetunedelay=10000
-export prefixsentences=20
-
 .SECONDARY: 
 
 .PHONY: 
 
-all: 
+export numtags=400
+export vwbits=29
+export minsentlength=8
+export summarylength=3
+export labelnoise=1e-4
 
-pretrain.model: pretrain.py tokenhisto taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2
-	@rm -f $(wildcard pretrain.model.* pretrain.embedding.h5f.*)
-	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
-
-prevalidate: prevalidate.py tokenhisto taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2 pretrain.model
-	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
-
-searn: search_cws.py pretrain.model tokenhisto taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2
-	GLOG_minloglevel=5 PYTHONPATH=../../python:../../../vowpal_wabbit/python python ./$<
-
-
-#------------------------------------------------
-# preprocessing stuff
-#------------------------------------------------
-
-WikiExtractor.py: 
-	wget http://medialab.di.unipi.it/Project/SemaWiki/Tools/WikiExtractor.py
+enwiki-20150901-pages-articles-multistream.xml.bz2:
+	wget --limit-rate=500K http://dumps.wikimedia.your.org/enwiki/20150901/$@
 
 enwiki-20150901.id2cat.txt.bz2: extractcategories.pl enwiki-20150901-pages-articles-multistream.xml.bz2
 	bzcat $(word 2,$^) | perl ./$(word 1,$^) | bzip2 > $@
 
-enwiki-20150901-pages-articles-multistream.xml.bz2:
-	wget --limit-rate=500K http://dumps.wikimedia.your.org/enwiki/20150901/$@
+taghisto: enwiki-20150901.id2cat.txt.bz2
+	bzcat $< | \
+	perl -F'\t' -lane \
+	  'shift @F; foreach (@F) { ++$$c{$$_}; } } \
+	   1; { foreach (sort { $$c{$$b}<=>$$c{$$a} } keys %c) { print "$$_\t$$c{$$_}"; }' > $@
 
 text/AA/wiki_00.bz2: WikiExtractor.py enwiki-20150901-pages-articles-multistream.xml.bz2
 	python ./WikiExtractor.py --no-templates --bytes 100G -c <(bzcat enwiki-20150901-pages-articles-multistream.xml.bz2)
@@ -68,11 +34,8 @@ text/AA/wiki_00.shuf.bz2: text/AA/wiki_00.bz2
 	                      1; chomp($$F[1]); print $$F[1]' |		\
 	  bzip2 > $@
 
-taghisto: enwiki-20150901.id2cat.txt.bz2
-	bzcat $< | \
-	perl -F'\t' -lane \
-	  'shift @F; foreach (@F) { ++$$c{$$_}; } } \
-	   1; { foreach (sort { $$c{$$b}<=>$$c{$$a} } keys %c) { print "$$_\t$$c{$$_}"; }' > $@
+pretrainaggregate.model: pretrainaggregate.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2
+	python ./$< | vw --invariant --power_t 0.25 -l 1 --multilabel_oaa $(numtags) -b $(vwbits) --multilabel_noise $(labelnoise) --loss_function logistic --ngram 3 --skips 1 -f pass0.vw
 
-tokenhisto: text/AA/wiki_00.bz2 maketokenhisto.pl
-	bzcat $(word 1,$^) | perl ./$(word 2,$^) > $@
+preval%: prevalaggregate.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2 pass%.vw
+	PYTHONPATH=../../../vowpal_wabbit/python python ./$< 
