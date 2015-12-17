@@ -5,3 +5,6 @@
 *.model*
 *.prototxt
 *.vw
+docid2label
+testx*
+trainx*

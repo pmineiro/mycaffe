@@ -16,11 +16,13 @@ def docs(filename):
         if line[:6] == "</doc>":
           yield int(docid), paragraphs
           docid=None
-        elif line.isspace():
-          paragraphs.append(' '.join(curpara))
-          curpara=[]
-        else:
-          curpara.append(line.rstrip('\n'))
+        elif not line.isspace():
+          if "\n" in line:
+            curpara.append(line.rstrip('\n'))
+            paragraphs.append(' '.join(curpara))
+            curpara=[]
+          else:
+            curpara.appand(line)
 
       if docid is None:
         m=startdocregex.match (line)
