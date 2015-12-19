@@ -8,6 +8,7 @@ export numtags=400
 export vwbits=29
 export minsentlength=8
 export summarylength=3
+export aggregatechars=1000
 export labelnoise=1e-4
 
 enwiki-20150901-pages-articles-multistream.xml.bz2:
@@ -34,8 +35,11 @@ text/AA/wiki_00.shuf.bz2: text/AA/wiki_00.bz2
 	                      1; chomp($$F[1]); print $$F[1]' |		\
 	  bzip2 > $@
 
+pretrainaggregate.model: pretrainaggregate.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2
+	python ./$< | vw --invariant --power_t 0.25 -l 1 --multilabel_oaa $(numtags) -b $(vwbits) --multilabel_noise $(labelnoise) --loss_function logistic --ngram 3 --skips 1 -f pass0aggregate.vw
+
 pretrainsummary.model: pretrainsummary.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2
 	python ./$< | vw --invariant --power_t 0.25 -l 1 --multilabel_oaa $(numtags) -b $(vwbits) --multilabel_noise $(labelnoise) --loss_function logistic --ngram 3 --skips 1 -f pass0summary.vw
 
 preval%: prevalaggregate.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2 pass%.vw
-	PYTHONPATH=../../../vowpal_wabbit/python python ./$< 
+	PYTHONPATH=../../../vowpal_wabbit/python python ./$< pass$*.vw

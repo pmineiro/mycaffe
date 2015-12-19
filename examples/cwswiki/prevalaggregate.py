@@ -7,6 +7,7 @@ import numpy as np
 import os
 import pyvw
 import random
+import string
 import sys
 import time
 
@@ -20,6 +21,7 @@ sys.stderr=os.fdopen(sys.stderr.fileno(), 'w', 0)
 numtags=int(os.environ['numtags'])
 minsentlength=int(os.environ['minsentlength'])
 summarylength=int(os.environ['summarylength'])
+aggregatechars=int(os.environ['aggregatechars'])
 labelnoise=float(os.environ['labelnoise'])
 
 #-------------------------------------------------
@@ -57,7 +59,7 @@ with open('id2cat.precomputed.%u.txt'%numtags,'r') as f:
 
 sys.stderr.write(' %g seconds.  len(id2cat)  = %d\n'%(float(time.time()-id2catstart), len(id2cat)))
 
-vw=pyvw.vw('-t -i pass0.vw')
+vw=pyvw.vw('-t -i %s'%sys.argv[1])
 
 #-------------------------------------------------
 # iterate
@@ -94,7 +96,8 @@ for docid, paragraphs in DocGenerator.docs('text/AA/wiki_00.shuf.bz2'):
       zeroonlyloss+=1 if l > 0 else -1
     examples+=1
     examplessincelast+=1
-    with vw.example("%s |w:%f %s"%(labeltext,1.0/math.sqrt(len(words)),rawtext[:1000])) as ex:
+    truncwords=len(string.split(rawtext[:aggregatechars]))
+    with vw.example("%s |w:%f %s"%(labeltext,1.0/math.sqrt(truncwords),rawtext[:aggregatechars])) as ex:
       ex.set_test_only(True)
       ex.learn()
       logloss=np.sum([math.log(1+math.exp(-ex.get_multilabel_raw_prediction(l))) for l in id2cat[docid]])+np.sum([math.log(1+math.exp(ex.get_multilabel_raw_prediction(l))) for l in range(numtags) if l not in id2cat[docid]])
