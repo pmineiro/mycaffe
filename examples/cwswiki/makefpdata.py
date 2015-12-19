@@ -1,5 +1,9 @@
 #! /usr/bin/env python
 
+# about 1.8 million documents (3x training examples)
+# 
+# 11502.9 1796001 3130318 0.364573
+
 import os
 import numpy as np
 import pyhash
@@ -12,7 +16,7 @@ import time
 import DocGenerator
 import pdb
 
-bits=18
+bits=24
 
 def hashit(ngram):
   hv = pyhash.murmur1_32()(' '.join(ngram))
@@ -39,6 +43,16 @@ with open('docid2label','wb') as f, open('trainxi','wb') as trainxi, \
      open('trainxj','wb') as trainxj, open('trainxs','wb') as trainxs, \
      open('testxi','wb') as testxi, open('testxj','wb') as testxj, \
      open('testxs','wb') as testxs:
+
+  # have to size the arrays just in case maximal feature does not occur
+  trainxi.write (struct.pack ('d', 1));
+  trainxj.write (struct.pack ('d', (1 << bits)));
+  trainxs.write (struct.pack ('d', 0));
+  testxi.write (struct.pack ('d', 1));
+  testxj.write (struct.pack ('d', (1 << bits)));
+  testxs.write (struct.pack ('d', 0));
+
+
   for docid, paragraphs in DocGenerator.docs ('text/AA/wiki_00.shuf.bz2'):
     goodparagraphs = [n for n in range (len (paragraphs))
                         if len (paragraphs[n].split ()) > 20]
@@ -76,5 +90,5 @@ with open('docid2label','wb') as f, open('trainxi','wb') as trainxi, \
                               skip,
                               float (keep) / (keep + skip))
 
-    if keep > 2 * 1000 * 1000:
+    if keep > 1 * 1000 * 1000:
       break
