@@ -11,8 +11,10 @@ export summarylength=3
 export aggregatechars=1000
 export labelnoise=1e-4
 
+ratelimit?=500K
+
 enwiki-20150901-pages-articles-multistream.xml.bz2:
-	wget --limit-rate=500K http://dumps.wikimedia.your.org/enwiki/20150901/$@
+	wget --limit-rate=$(ratelimit) http://dumps.wikimedia.your.org/enwiki/20150901/$@
 
 enwiki-20150901.id2cat.txt.bz2: extractcategories.pl enwiki-20150901-pages-articles-multistream.xml.bz2
 	bzcat $(word 2,$^) | perl ./$(word 1,$^) | bzip2 > $@

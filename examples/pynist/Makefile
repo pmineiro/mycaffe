@@ -17,6 +17,9 @@ train.model: train.py $(dataset)
 trainlowrank.model: trainlowrank.py $(dataset)
 	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
 
+trainlowrankpair.model: trainlowrankpair.py $(dataset)
+	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
+
 testlowrank: test.py trainlowrank.model 
 	@GLOG_minloglevel=5 PYTHONPATH=../../python python ./$< $(word 2, $^)
 
