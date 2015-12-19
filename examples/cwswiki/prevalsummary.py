@@ -81,11 +81,9 @@ for docid, paragraphs in DocGenerator.docs('text/AA/wiki_00.shuf.bz2'):
                 if len(s) >= minsentlength ]
     if len(sents) < summarylength:
       continue
-#     z=range(len(sents)) 
-#     random.shuffle(z) 
-#     sample=[sents[index] for index in 
-#               sorted(z[passn*summarylength:(passn+1)*summarylength])]
-    sample=sents
+    z=range(len(sents)) 
+    random.shuffle(z) 
+    sample=[sents[index] for index in sorted(z[0:summarylength])]
     words=[w.replace(':','_').replace('|','_') for s in sample for w in s]
     rawtext=' '.join(words)
     labeltext=','.join([str(l) for l in id2cat[docid]])
@@ -121,32 +119,3 @@ for l in range(numtags):
 
 loss=loss/numtags
 sys.stderr.write("best constant loss: %g\n"%loss)
-
-# PYTHONPATH=../../../vowpal_wabbit/python python ./prevalaggregate.py pass0aggregate.vw
-# using precomputed id2cat (400)... 2.80215 seconds.  len(id2cat)  = 690906
-# Generating 3-grams for all namespaces.
-# Generating 1-skips for all namespaces.
-# only testing
-# Num weight bits = 29
-# learning rate = 0.5
-# initial_t = 0
-# power_t = 0.5
-# using no cache
-# Reading datafile =
-# num sources = 0
-# 0.0489779       0.0489779
-# 0.0301811       0.0113843
-# 0.0241243       0.0180675
-# 0.0233809       0.0226375
-# 0.0289429       0.0345048
-# 0.0271956       0.0254483
-# 0.0211159       0.0150361
-# 0.0228576       0.0245994
-# 0.0243529       0.0258482
-# 0.0242974       0.0242418
-# 0.0249116       0.0255258
-# 0.0247603       0.024609
-# 0.0252925       0.0258248
-# 0.0252128       0.025133
-# labels=53278 examples=30787 labels/example=1.73054 nonzeroloss/example=2.62101
-# best constant loss: 0.0267863

@@ -120,46 +120,42 @@ for l in range(numtags):
 loss=loss/numtags
 sys.stderr.write("best constant loss: %g\n"%loss)
 
-# pmineiro@pmineiro-KGP-M-E-D16-91% make pretrainaggregate.model
-# python ./pretrainaggregate.py | vw --invariant --power_t 0.5 -l 1 --multilabel_oaa 400 -b 29 --loss_noise 1e-4 --loss_function noisylogistic --ngram 3 --skips 1 --replay_m 10000
+# python ./pretrainsummary.py | vw --invariant --power_t 0.25 -l 1 --multilabel_oaa 400 -b 29 --multilabel_noise 1e-4 --loss_function logistic --ngram 3 --skips 1 -f pass0summary.vw
 # Generating 3-grams for all namespaces.
 # Generating 1-skips for all namespaces.
-# experience replay level=m, buffer=10000, replay count=1
+# final_regressor = pass0summary.vw
 # Num weight bits = 29
 # learning rate = 1
 # initial_t = 1
-# power_t = 0.5
+# power_t = 0.25
 # using no cache
 # Reading datafile =
 # num sources = 1
 # average  since         example        example  current  current  current
 # loss     last          counter         weight    label  predict features
-# using precomputed id2cat (400)... 2.72132 seconds.  len(id2cat)  = 690906
-# 0.693146 0.693146            1            1.0       11               338
-# 0.689290 0.685434            2            2.0       11               326
-# 0.650171 0.611051            4            4.0       96       11      326
-# 0.585474 0.520778            8            8.0      320  11 96 320      464
-# 0.460752 0.336030           16           16.0      380      206      284
-# 0.337697 0.214642           32           32.0      140               326
-# 0.207076 0.076455           64           64.0   16 103               224
-# 0.136729 0.066382          128          128.0   59 350               302
-# 0.088704 0.040679          256          256.0       29               356
-# 0.063924 0.039144          512          512.0  28 35 114 212               332
-# 0.049700 0.035476         1024         1024.0  134 269               392
-# 0.041145 0.032590         2048         2048.0      363               506
-# 0.035262 0.029379         4096         4096.0      388               284
-# 0.031596 0.027931         8192         8192.0  14 34 101 237 258               284
-# 0.028542 0.025489        16384        16384.0      109               446
-# 0.026446 0.024349        32768        32768.0      230               314
-# 
-# best constant loss: 0.0276381
-# saving regressor to pass0.vw
+# using precomputed id2cat (400)... 3.05664 seconds.  len(id2cat)  = 690906
+# 0.693146 0.693146            1            1.0  47 90 113               380
+# 0.597301 0.501456            2            2.0      320  47 90 113      422
+# 0.351716 0.106131            4            4.0      360       11      338
+# 0.232462 0.113208            8            8.0       73               386
+# 0.155914 0.079365           16           16.0  118 288 291       52      332
+# 0.111433 0.066952           32           32.0      0 1               710
+# 0.075704 0.039975           64           64.0       16      283      464
+# 0.059218 0.042732          128          128.0       16               470
+# 0.046813 0.034408          256          256.0      317               236
+# 0.038487 0.030161          512          512.0       73               386
+# 0.033972 0.029457         1024         1024.0  193 376 381               272
+# 0.030358 0.026743         2048         2048.0      322               266
+# 0.028096 0.025834         4096         4096.0       29               326
+# 0.026018 0.023941         8192         8192.0      133        7      308
+# 0.024305 0.022591        16384        16384.0  126 156               428
+# 0.023048 0.021792        32768        32768.0   99 182       39      410
+# best constant loss: 0.0277398
 # 
 # finished run
-# number of examples per pass = 61980
+# number of examples per pass = 56589
 # passes used = 1
-# weighted example sum = 61980.000000
+# weighted example sum = 56589.000000
 # weighted label sum = 0.000000
-# average loss = 3.918167
-# total feature number = 23344338
-
+# average loss = 0.022120
+# total feature number = 20869362

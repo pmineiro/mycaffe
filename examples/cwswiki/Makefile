@@ -43,5 +43,8 @@ pretrainaggregate.model: pretrainaggregate.py taghisto enwiki-20150901.id2cat.tx
 pretrainsummary.model: pretrainsummary.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2
 	python ./$< | vw --invariant --power_t 0.25 -l 1 --multilabel_oaa $(numtags) -b $(vwbits) --multilabel_noise $(labelnoise) --loss_function logistic --ngram 3 --skips 1 -f pass0summary.vw
 
-preval%: prevalaggregate.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2 pass%.vw
-	PYTHONPATH=../../../vowpal_wabbit/python python ./$< pass$*.vw
+prevalaggregate%: prevalaggregate.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2 pass%aggregate.vw
+	PYTHONPATH=../../../vowpal_wabbit/python python ./$< pass$*aggregate.vw
+
+prevalsummary%: prevalsummary.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2 pass%summary.vw
+	PYTHONPATH=../../../vowpal_wabbit/python python ./$< pass$*summary.vw
