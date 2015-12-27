@@ -11,6 +11,21 @@ export summarylength=3
 export aggregatechars=1000
 export labelnoise=1e-4
 
+export tokencutoff=100000
+export numpos=30
+export embedd=50
+export batchsize=1000
+export numconvk=10
+export numip1=20
+export numip2=20
+export alpha=0.9
+export eta=1e-4
+export etamin=1e-4
+export etadecay=0
+export weightdecay=0
+export numdocs=10000
+export maxshufbuf=10000
+
 ratelimit?=500K
 
 enwiki-20150901-pages-articles-multistream.xml.bz2:

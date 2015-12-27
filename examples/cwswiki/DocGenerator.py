@@ -22,7 +22,7 @@ def docs(filename):
             paragraphs.append(' '.join(curpara))
             curpara=[]
           else:
-            curpara.appand(line)
+            curpara.append(line)
 
       if docid is None:
         m=startdocregex.match (line)
