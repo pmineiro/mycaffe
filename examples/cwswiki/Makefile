@@ -48,3 +48,7 @@ prevalaggregate%: prevalaggregate.py taghisto enwiki-20150901.id2cat.txt.bz2 tex
 
 prevalsummary%: prevalsummary.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA/wiki_00.shuf.bz2 pass%summary.vw
 	PYTHONPATH=../../../vowpal_wabbit/python python ./$< pass$*summary.vw
+
+tokenhisto: maketokenhisto.py text/AA/wiki_00.shuf.bz2
+	python ./$< > $@
+

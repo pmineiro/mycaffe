@@ -58,7 +58,6 @@ try:
       lc=line.split('\t')
       id2cat[int(lc[0])]=[int(c) for c in lc[1:] if not c.isspace()]
 except exceptions.IOError:
-  id2catstart=time.time()
   sys.stderr.write('computing id2cat (%u)...'%numtags)
   with bz2.BZ2File('enwiki-20150901.id2cat.txt.bz2', 'rb') as f:
     for line in f:
