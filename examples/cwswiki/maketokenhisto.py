@@ -19,7 +19,8 @@ for docid, paragraphs in DocGenerator.docs('text/AA/wiki_00.shuf.bz2'):
                       if len (paragraphs[n].split ()) > 20]
 
   for n in goodparagraphs:
-    for t in [ t.strip (string.punctuation) for t in paragraphs[n].split() ]:
+    for t in [ w for w in [ t.strip (string.punctuation) for t in paragraphs[n].split() ]
+                 if len(w) > 0 ]:
       tokenfreq[t] += 1
 
 z=sorted(tokenfreq.items(),key=operator.itemgetter(1),reverse=True)

@@ -11,21 +11,6 @@ export summarylength=3
 export aggregatechars=1000
 export labelnoise=1e-4
 
-export tokencutoff=100000
-export numpos=30
-export embedd=50
-export batchsize=1000
-export numconvk=10
-export numip1=20
-export numip2=20
-export alpha=0.9
-export eta=1e-4
-export etamin=1e-4
-export etadecay=0
-export weightdecay=0
-export numdocs=10000
-export maxshufbuf=10000
-
 ratelimit?=500K
 
 enwiki-20150901-pages-articles-multistream.xml.bz2:
@@ -67,3 +52,21 @@ prevalsummary%: prevalsummary.py taghisto enwiki-20150901.id2cat.txt.bz2 text/AA
 tokenhisto: maketokenhisto.py text/AA/wiki_00.shuf.bz2
 	python ./$< > $@
 
+export numtokens=100000
+export numpos=30
+export embedd=100
+export batchsize=1001
+export numconvk=20
+export numip1=200
+export numip2=200
+export alpha=0.5
+export eta=1e-2
+export etamin=1e-4
+export etadecay=0.995
+export weightdecay=0
+export numdocs=10000
+export maxshufbuf=100000
+
+tongnet.model: tongtrain.py tokenhisto text/AA/wiki_00.shuf.bz2
+	rm -f $(wildcard tongnet.model.*) $(wildcard tongnet.embedding.*)
+	GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
