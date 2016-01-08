@@ -55,17 +55,17 @@ tokenhisto: maketokenhisto.py text/AA/wiki_00.shuf.bz2
 export numtokens=100000
 export numpos=30
 export embedd=100
-export batchsize=1001
-export numconvk=20
+export batchsize=1000
+export numconvk=30
 export numip1=200
 export numip2=200
-export alpha=0.5
+export alpha=0.8
 export eta=1e-2
-export etamin=1e-4
+export etamin=1e-6
 export etadecay=0.995
 export weightdecay=0
-export numdocs=10000
-export maxshufbuf=100000
+export numdocs=1000
+export maxshufbuf=10000
 
 tongnet.model: tongtrain.py tokenhisto text/AA/wiki_00.shuf.bz2
 	rm -f $(wildcard tongnet.model.*) $(wildcard tongnet.embedding.*)
