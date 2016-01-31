@@ -21,6 +21,7 @@ batchsize = int (os.environ['batchsize'])
 numusers = int (os.environ['numusers'])
 nummovies = int (os.environ['nummovies'])
 numratings = int (os.environ['numratings'])
+rank = int (os.environ['rank'])
 maxshufbuf = int (os.environ['maxshufbuf'])
 eta = float (os.environ['eta'])
 etamin = float (os.environ['etamin'])
@@ -31,7 +32,7 @@ protofilename = myname[0] + 'net.proto'
 netfilename = myname[0] + 'net.model'
 vizfilename = myname[0] + 'net.png'
 
-spec = TheNet.full (batchsize, numusers, nummovies, numratings)
+spec = TheNet.fm (batchsize, numusers, nummovies, numratings, rank)
 draw.draw_net_to_file (spec, vizfilename)
 
 protofile = os.path.join (os.path.dirname (os.path.realpath (__file__)), protofilename)
@@ -136,17 +137,3 @@ print "%7s\t%7.3f\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"% (
     nicecount (numupdates*batchsize),
     passes,
     eta)
-
-# GLOG_minloglevel=5 PYTHONPATH=../../python python ./full.py
-#   delta average   since     acc example pass     learning
-#       t    loss    last   since counter  num         rate
-#  7.548s   1.611   1.611  17.900    1000    0    9.990e-01
-# 15.473s   1.583   1.555  33.600    2000    0    9.980e-01
-# 30.797s   1.528   1.473  32.600    4000    0    9.960e-01
-# 59.633s   1.514   1.500  33.875    8000    0    9.920e-01
-#  1.974m   1.514   1.514  36.150     16K    0    9.841e-01
-#  3.906m   1.505   1.496  37.244     32K    0    9.685e-01
-#  7.684m   1.476   1.447  37.681     64K    0    9.380e-01
-# 15.286m   1.473   1.469  37.777    128K    0    8.799e-01
-# 30.347m   1.519   1.566  36.535    256K    0    7.743e-01
-#  1.010h   1.541   1.563  36.311    512K    0    5.995e-01

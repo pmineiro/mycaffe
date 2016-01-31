@@ -60,3 +60,42 @@ def full(batchsize, nqueries, nads, nratings):
 # 
 # f (q, a) = \sum_k (q^\top u_k) (v_k^\top a), u_k \in R^d, v_k \in \R^c
 #-------------------------------------------------
+
+def fm(batchsize, nqueries, nads, nratings, rank):
+  n = caffe.NetSpec()
+  n.data, n.label = L.MemoryData(batch_size=batchsize,
+                                 channels=1,
+                                 height=1,
+                                 width=(nqueries + nads),
+                                 ntop=2)
+  n.queries, n.ads = L.Slice(n.data,
+                             slice_param=dict(axis=3,slice_point=[nqueries]),
+                             ntop=2)
+
+  n.Utopq = L.InnerProduct(n.queries, num_output=nratings*rank)
+  n.Utopqreshape = L.Reshape(n.Utopq, 
+                             reshape_param=dict(shape=dict(dim=[batchsize,nratings,1,rank])))
+
+  n.Vtopa = L.InnerProduct(n.ads, num_output=nratings*rank)
+  n.Vtopareshape = L.Reshape(n.Vtopa, 
+                             reshape_param=dict(shape=dict(dim=[batchsize,nratings,1,rank])))
+
+  n.predot = L.Eltwise(n.Utopqreshape, n.Vtopareshape,
+                       eltwise_param=dict(operation=0) # 0 = PROD
+                       )
+  # use identity convolution to sum
+  n.dot = L.Convolution(n.predot,
+                        convolution_param=dict(num_output=nratings,
+                                               bias_term=False,
+                                               kernel_h=1,
+                                               kernel_w=rank,
+                                               group=nratings))
+  n.dotreshape = L.Reshape(n.dot,
+                           reshape_param=dict(shape=dict(dim=[batchsize,nratings])))
+  n.linearterms = L.InnerProduct(n.data, num_output=nratings)
+  n.scores = L.Eltwise(n.dotreshape, n.linearterms, 
+                       eltwise_param=dict(operation=1) # 1 = SUM
+		       )
+  n.loss = L.SoftmaxWithLoss(n.scores, n.label)
+  n.acc = L.Accuracy(n.scores, n.label, loss_weight=0)
+  return n.to_proto()
