@@ -7,7 +7,23 @@ from caffe import params as P
 #-------------------------------------------------
 
 #-------------------------------------------------
-# full bilinear model
+# linear model (i.e., user/movie and global bias only)
+#-------------------------------------------------
+
+def linear(batchsize, nqueries, nads, nratings):
+  n = caffe.NetSpec()
+  n.data, n.label = L.MemoryData(batch_size=batchsize,
+                                 channels=1,
+                                 height=1,
+                                 width=(nqueries + nads),
+                                 ntop=2)
+  n.scores = L.InnerProduct(n.data, num_output=nratings)
+  n.loss = L.SoftmaxWithLoss(n.scores, n.label)
+  n.acc = L.Accuracy(n.scores, n.label, loss_weight=0)
+  return n.to_proto()
+
+#-------------------------------------------------
+# full bilinear model (+ linear)
 # 
 # f (q, a) = q^\top W a, q \in \R^d, a \in \R^c, W \in \R^{d \times c}
 #          = (W^\top q)^\top a
@@ -56,7 +72,7 @@ def full(batchsize, nqueries, nads, nratings):
   return n.to_proto()
 
 #-------------------------------------------------
-# factorization machine
+# factorization machine (+ linear)
 # 
 # f (q, a) = \sum_k (q^\top u_k) (v_k^\top a), u_k \in R^d, v_k \in \R^c
 #-------------------------------------------------
@@ -90,7 +106,8 @@ def fm(batchsize, nqueries, nads, nratings, rank):
                                                kernel_h=1,
                                                kernel_w=rank,
                                                group=nratings))
-  n.dotreshape = L.Reshape(n.dot,
+  n.dropdot = L.Dropout(n.dot)
+  n.dotreshape = L.Reshape(n.dropdot,
                            reshape_param=dict(shape=dict(dim=[batchsize,nratings])))
   n.linearterms = L.InnerProduct(n.data, num_output=nratings)
   n.scores = L.Eltwise(n.dotreshape, n.linearterms, 

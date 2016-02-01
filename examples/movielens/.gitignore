@@ -1,5 +1,6 @@
 ml-1m
 *.model
+*.model.*
 *.png
 *.proto
 *.zip

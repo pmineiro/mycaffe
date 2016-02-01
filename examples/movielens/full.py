@@ -31,6 +31,39 @@ protofilename = myname[0] + 'net.proto'
 netfilename = myname[0] + 'net.model'
 vizfilename = myname[0] + 'net.png'
 
+def do_test (net, labels, inputs, starttime):
+  bindex = 0
+  sumloss = 0
+  sumacc = 0
+  numbatches = 0
+  for movie, user, rating in MovieLens.data ('./ml-1m/', maxshufbuf, True):
+    inputs[bindex, 0, 0, :] = 0
+    inputs[bindex, 0, 0, user - 1] = 1
+    inputs[bindex, 0, 0, numusers + movie - 1] = 1
+
+    labels[bindex, 0, 0, 0] = rating - 1
+
+    bindex += 1
+
+    if bindex >= batchsize:
+      net.set_input_arrays (inputs, labels)
+      res = net.forward ()
+
+      sumloss += res['loss']
+      sumacc += res['acc']    
+      numbatches += 1
+      bindex = 0
+
+  now = time.time ()
+  print "%7s\t%7.3f\t%7.3f\t%7.3f\t%7s\t%4s\t%9s"% (
+      nicetime (float (now-starttime)),
+      sumloss/numbatches,
+      sumloss/numbatches,
+      100 * (sumacc / numbatches), 
+      nicecount (numbatches*batchsize),
+      '*',
+      'test')
+
 spec = TheNet.full (batchsize, numusers, nummovies, numratings)
 draw.draw_net_to_file (spec, vizfilename)
 
@@ -70,7 +103,7 @@ inputs=np.zeros((batchsize,1,1,numusers+nummovies),dtype='f')
 bindex=0
 
 for passes in range(1):
-  for user, movie, rating in MovieLens.data('./ml-1m/', maxshufbuf):
+  for movie, user, rating in MovieLens.data ('./ml-1m/', maxshufbuf, False):
     inputs[bindex, 0, 0, :] = 0
     inputs[bindex, 0, 0, user - 1] = 1
     inputs[bindex, 0, 0, numusers + movie - 1] = 1
@@ -128,6 +161,9 @@ for passes in range(1):
         sumsinceloss = 0
         sumsinceacc = 0
 
+        if passes > 0:
+          do_test (net, labels, inputs, starttime)
+
 now = time.time ()
 print "%7s\t%7.3f\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"% (
     nicetime (float (now-starttime)),
@@ -137,6 +173,8 @@ print "%7s\t%7.3f\t%7.3f\t%7.3f\t%7s\t%4u\t%9.3e"% (
     nicecount (numupdates*batchsize),
     passes,
     eta)
+
+do_test (net, labels, inputs, starttime)
 
 # GLOG_minloglevel=5 PYTHONPATH=../../python python ./full.py
 #   delta average   since     acc example pass     learning
