@@ -39,3 +39,9 @@ export rank
 
 fm: fm.py
 	GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
+
+numips ?= 40,40
+export numips
+
+crossfm: crossfm.py
+	GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<

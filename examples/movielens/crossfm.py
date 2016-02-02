@@ -22,6 +22,7 @@ numusers = int (os.environ['numusers'])
 nummovies = int (os.environ['nummovies'])
 numratings = int (os.environ['numratings'])
 rank = int (os.environ['rank'])
+numips = [ int (x) for x in os.environ['numips'].split (',') ]
 maxshufbuf = int (os.environ['maxshufbuf'])
 eta = float (os.environ['eta'])
 etamin = float (os.environ['etamin'])
@@ -65,7 +66,7 @@ def do_test (net, labels, inputs, starttime):
       '*',
       'test')
 
-spec = TheNet.fm (batchsize, numusers, nummovies, numratings, rank)
+spec = TheNet.crossfm (batchsize, numusers, nummovies, numratings, rank, numips)
 draw.draw_net_to_file (spec, vizfilename)
 
 protofile = os.path.join (os.path.dirname (os.path.realpath (__file__)), protofilename)
@@ -190,32 +191,32 @@ testnet = caffe.Net(protofile, netfilename, caffe.TEST)
 do_test (testnet, labels, inputs, starttime)
 del testnet
 
-# GLOG_minloglevel=5 PYTHONPATH=../../python python ./fm.py
+# GLOG_minloglevel=5 PYTHONPATH=../../python python ./crossfm.py
 #   delta average   since     acc example pass     learning
 #       t    loss    last   since counter  num         rate
-#   113ms   1.609   1.609  21.200    1000    0    9.990e-03
-#   162ms   1.609   1.608  24.200    2000    0    9.980e-03
-#   250ms   1.607   1.606  27.100    4000    0    9.960e-03
-#   418ms   1.603   1.599  30.625    8000    0    9.920e-03
-#   749ms   1.585   1.567  35.137     16K    0    9.841e-03
-#  1.459s   1.544   1.502  34.513     32K    0    9.685e-03
-#  2.924s   1.503   1.462  35.175     64K    0    9.380e-03
-#  5.822s   1.533   1.563  32.869    128K    0    8.798e-03
-# 11.283s   1.545   1.556  34.543    256K    0    7.740e-03
-# 22.554s   1.530   1.515  33.366    512K    0    5.991e-03
-# 44.087s   1.516   1.501  34.312   1024K    1    3.590e-03
-# 47.185s   1.609   1.609  31.033    3000    *         test
-#  1.472m   1.511   1.507  38.649   2048K    2    1.289e-03
-#  1.523m   1.589   1.589  36.267    3000    *         test
-#  2.792m   1.497   1.483  39.859   4096K    4    1.661e-04
-#  2.845m   1.447   1.447  36.033    3000    *         test
-#  5.443m   1.420   1.342  42.231   8192K    8    2.857e-06
-#  5.494m   1.469   1.469  37.700    3000    *         test
-# 10.492m   1.356   1.293  43.313     16M   16    1.008e-07
-# 10.542m   1.423   1.423  36.567    3000    *         test
-# 20.425m   1.322   1.289  43.331     32M   32    1.000e-07
-# 20.473m   1.432   1.432  36.667    3000    *         test
-# 40.254m   1.304   1.286  43.408     65M   65    1.000e-07
-# 40.304m   1.435   1.435  37.333    3000    *         test
-#  1.015h   1.297   1.284  43.622     99M   99    1.000e-07
-#  1.016h   1.419   1.419  37.333    3000    *         test
+#   105ms   1.612   1.612  16.200    1000    0    9.990e-03
+#   143ms   1.611   1.609  21.600    2000    0    9.980e-03
+#   214ms   1.608   1.604  27.300    4000    0    9.960e-03
+#   350ms   1.596   1.585  32.050    8000    0    9.920e-03
+#   620ms   1.561   1.525  35.512     16K    0    9.841e-03
+#  1.157s   1.518   1.475  34.513     32K    0    9.685e-03
+#  2.267s   1.512   1.506  34.363     64K    0    9.380e-03
+#  4.749s   1.511   1.510  34.658    128K    0    8.798e-03
+#  9.786s   1.502   1.494  33.872    256K    0    7.740e-03
+# 19.965s   1.470   1.437  36.100    512K    0    5.991e-03
+# 38.819s   1.441   1.412  37.615   1024K    1    3.590e-03
+# 41.846s   1.509   1.509  33.700    3000    *         test
+#  1.298m   1.393   1.346  41.465   2048K    2    1.289e-03
+#  1.349m   1.428   1.428  38.800    3000    *         test
+#  2.538m   1.353   1.313  42.611   4096K    4    1.661e-04
+#  2.588m   1.467   1.467  36.467    3000    *         test
+#  4.860m   1.320   1.287  43.534   8192K    8    2.857e-06
+#  4.912m   1.434   1.434  37.900    3000    *         test
+#  9.461m   1.300   1.280  43.752     16M   16    1.008e-07
+#  9.513m   1.421   1.421  38.367    3000    *         test
+# 18.546m   1.290   1.280  43.846     32M   32    1.000e-07
+# 18.597m   1.418   1.418  37.900    3000    *         test
+# 36.484m   1.284   1.279  43.822     65M   65    1.000e-07
+# 36.536m   1.425   1.425  37.667    3000    *         test
+# 55.236m   1.282   1.277  43.913     99M   99    1.000e-07
+# 55.290m   1.421   1.421  38.133    3000    *         test
