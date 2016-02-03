@@ -14,7 +14,7 @@ maxshufbuf ?= 10000
 export maxshufbuf
 eta ?= 1e-2
 export eta
-etamin ?= 1e-7
+etamin ?= 1e-5
 export etamin
 etadecay ?= 0.999
 export etadecay
@@ -34,13 +34,14 @@ linear: linear.py
 full: full.py
 	GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
 
-rank ?= 10
+rank ?= 6
 export rank
 
+fm: etamin = 1e-6
 fm: fm.py
 	GLOG_minloglevel=5 PYTHONPATH=../../python python ./$<
 
-numips ?= 40,40
+numips ?= 20,20
 export numips
 
 crossfm: crossfm.py
